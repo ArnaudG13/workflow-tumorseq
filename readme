@@ -1,0 +1,29 @@
+dependencies:
+  - trimmomatic=0.36
+  - samtools
+  - gatk=3.5
+  - picard=2.9.2
+  - bwa=0.7.15
+  - qualimap=2.2
+  - vcftools=0.1.14
+  - pindel=0.2.5b8
+  - varscan=2.4.2
+  - somatic-sniper=1.0.5.0
+  - lofreq=2.1.2
+  - vardict=2017.04.18
+  - joint-snv-mix
+
+/home/guille/.local/miniconda3/bin/conda-env create --file /home/guille/envs/somatic_analysis_environment.yml
+source activate somatic_pipeline_snakemake
+source deactivate somatic_pipeline_snakemake
+/home/guille/.local/miniconda3/bin/conda-env remove --prefix /home/guille/.local/miniconda3/envs/somatic_pipeline_snakemake
+
+export PYTHONNOUSERSITE=True
+unset PYTHONPATH
+unset JAVA_HOME
+
+snakemake -j 9999 --snakefile /home/data/ngs_om/travail/scripts/snakefiles/Snakefile_tumor_normal_variant_analysis --configfile /home/guille/test_pipeline_snakemake2/config.yml --use-conda
+
+snakemake -j 9999 --snakefile /home/data/ngs_om/travail/scripts/snakefiles/Snakefile_tumor_normal_variant_analysis --configfile /home/guille/test_pipeline_snakemake2/config.yml --use-conda --cluster-config /home/data/ngs_om/travail/scripts/snakefiles/cluster.yml --cluster "oarsub -l host={cluster.host}/core={cluster.core},walltime={cluster.time} -O {cluster.stdout} -E {cluster.stderr}"
+
+snakemake -j 9999 --snakefile /home/data/ngs_om/travail/scripts/snakefiles/Snakefile_tumor_normal_variant_analysis --configfile /home/guille/test_pipeline_snakemake2/config.yml --use-conda --cluster-config /home/data/ngs_om/travail/scripts/snakefiles/cluster.yml --cluster "oarsub -l host={cluster.host}/core={cluster.core},walltime={cluster.time} -O {cluster.stdout} -E {cluster.stderr}" --rerun-incomplete
