@@ -68,54 +68,6 @@ else:
 if not "mapping" in config["tools"].keys() :
     sys.exit("Missing parameters mapping")
 
-if not "snv_calling" in config["tools"].keys() :
-    sys.exit("Missing parameters snv_calling")
-else :
-    if config["tools"]["snv_calling"] == "VarScan2" :
-        output_snv = "VarScan2"
-        #Check VarScan2 params if Varscan2 is used
-        if not "min_coverage" in config["varscan2"].keys() :
-            sys.exit("Missing parameters min_coverage for VarScan2")
-        if not "min_var_frac" in config["varscan2"].keys() :
-            sys.exit("Missing parameters min_var_frac for VarScan2")
-        if not "min_alt_count" in config["varscan2"].keys() :
-            sys.exit("Missing parameters min_alt_count for VarScan2")
-        if not "min_avg_qual" in config["varscan2"].keys() :
-            sys.exit("Missing parameters min_avg_qual for VarScan2")
-        if not "strand_filter" in config["varscan2"].keys() :
-            sys.exit("Missing parameters strand_filter for VarScan2")
-
-    elif config["tools"]["snv_calling"] == "FreeBayes" :
-        output_snv = "FreeBayes"
-    
-    elif config["tools"]["snv_calling"] == "CombinedVarScan2Mutect2" :
-        output_snv = "CombinedVarScan2Mutect2"
-        if not "min_coverage" in config["varscan2"].keys() :
-            sys.exit("Missing parameters min_coverage for VarScan2")
-        if not "min_var_frac" in config["varscan2"].keys() :
-            sys.exit("Missing parameters min_var_frac for VarScan2")
-        if not "min_alt_count" in config["varscan2"].keys() :
-            sys.exit("Missing parameters min_alt_count for VarScan2")
-        if not "min_avg_qual" in config["varscan2"].keys() :
-            sys.exit("Missing parameters min_avg_qual for VarScan2")
-        if not "strand_filter" in config["varscan2"].keys() :
-            sys.exit("Missing parameters strand_filter for VarScan2")
-    
-    else :
-        sys.exit("snv_calling parameter should be VarScan2, FreeBayes or CombinedVarScan2Mutect2")
-
-if not "indel_calling" in config["tools"].keys() :
-    sys.exit("Missing parameters indel_calling")
-else :
-    if config["tools"]["indel_calling"] == "CombinedPindelMutect2" :
-        output_indel = "CombinedPindelMutect2"
-
-    elif config["tools"]["indel_calling"] == "CombinedPindelHC" :
-        output_indel = "CombinedPindelHC"
- 
-    else :
-        sys.exit("indel_calling parameter should be CombinedPindelHC or CombinedPindelMutect2")
-
 if not "paired" in config["tools"].keys() :
     sys.exit("Missing parameters paired")
 else :
@@ -156,9 +108,15 @@ else :
     if config["tools"]["dedup"] == "1" :
         dedup=True
         tag_process_dedup = ".dedup."
+        dedup_option_vardict = "--dedup"
+        dedup_option_pisces = "--filterduplicates true"
+        dedup_option_platypus = "--filterDuplicates=1"     
     else:
         dedup=False
         tag_process_dedup = "."
+        dedup_option_vardict = ""
+        dedup_option_pisces = ""
+        dedup_option_platypus = "--filterDuplicates=0" 
 
 if not "trimming" in config["tools"].keys() :
     sys.exit("Missing parameters trimming")
@@ -268,8 +226,6 @@ print("Trimming : " + str(trimming) )
 print("Molecular_barcode : " + str(molecular_barcode))
 print("Uniq Alignment : " + str(uniq))
 print("Mark duplicates : " + str(dedup))
-print("SNV Caller : " + str(output_snv))
-print("INDEL Caller : " + str(output_indel))
 
 output_analysis = "/analyse_"+config["metadata"]["date"]
 
@@ -337,15 +293,6 @@ else :
 	            #expand(output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort.bam",seq_name=SAMPLES)
 				#expand(expand(config["dir"]["base"]+"/{tumor}_{normal}/SomaticAnalysis/{{variant_caller}}/{seq_name}_vs_{normal}.{{variant_caller}}.somatic.snv.sort.vcf",zip,tumor=TUMOR, normal=NORMAL, seq_name=SAMPLES_TUMOR),variant_caller=vc_list_snv)
 
-rule split_bed:
-    input:
-        config["metadata"]["design"]
-    output:
-        output_dir+"/{chr}.bed"
-    shell:
-        """awk '$1=="{wildcards.chr}" {{print $FN}}' {input} > {output}"""
-
-
 if paired is True :
 
     if molecular_barcode is True :
@@ -363,7 +310,7 @@ if paired is True :
                 "docker://ngsom/tumorseq"
             params:
                 crop=params_trim_crop
-            shell:"trimmomatic -Xmx16G PE -threads 8 -phred33 {input} {output.r1_paired} {output.r1_unpaired} {output.r2_paired} {output.r2_unpaired} HEADCROP:8 SLIDINGWINDOW:4:15 CROP:{params.crop}"
+            shell:"java -Xmx16G -jar /usr/share/java/Trimmomatic-0.39/trimmomatic-0.39.jar PE -threads 8 -phred33 {input} {output.r1_paired} {output.r1_unpaired} {output.r2_paired} {output.r2_unpaired} HEADCROP:8 SLIDINGWINDOW:4:15 CROP:{params.crop}"
 
         #Fastqc
         rule fastqc:
@@ -373,7 +320,7 @@ if paired is True :
                 output_dir+"/{seq_name}/report_{seq_name}/"+"{seq_name}_R1_001.paired.trim_fastqc.html",
                 output_dir+"/{seq_name}/report_{seq_name}/"+"{seq_name}_R3_001.paired.trim_fastqc.html"
             params:
-                base_dir=config["dir"]["base"]
+                base_dir=output_dir
             container:
                 "docker://ngsom/tumorseq"
             shell:
@@ -395,7 +342,7 @@ if paired is True :
                 "docker://ngsom/tumorseq"
             params:
                 crop=params_trim_crop
-            shell:"trimmomatic -Xmx16G PE -threads 8 -phred33 {input} {output.r1_paired} {output.r1_unpaired} {output.r2_paired} {output.r2_unpaired} HEADCROP:8 SLIDINGWINDOW:4:15 CROP:{params.crop}"
+            shell:"java -Xmx16G -jar /usr/share/java/Trimmomatic-0.39/trimmomatic-0.39.jar PE -threads 8 -phred33 {input} {output.r1_paired} {output.r1_unpaired} {output.r2_paired} {output.r2_unpaired} HEADCROP:8 SLIDINGWINDOW:4:15 CROP:{params.crop}"
 
          #Fastqc
         rule fastqc:
@@ -405,7 +352,7 @@ if paired is True :
                 output_dir+"/{seq_name}/report_{seq_name}/"+"{seq_name}_R1_001.paired.trim_fastqc.html",
                 output_dir+"/{seq_name}/report_{seq_name}/"+"{seq_name}_R2_001.paired.trim_fastqc.html"
             params:
-                base_dir=config["dir"]["base"]
+                base_dir=output_dir
             container:
                 "docker://ngsom/tumorseq"
             shell:
@@ -420,7 +367,7 @@ else :
             temp(fastq_dir+"/"+"{seq_name}_R1_001.trim.fastq.gz"),
         container:
             "docker://ngsom/tumorseq"
-        shell:"trimmomatic -Xmx16G SE -threads 8 -phred33 {input} {output} HEADCROP:8 SLIDINGWINDOW:4:15 CROP:250"
+        shell:"java -Xmx16G -jar /usr/share/java/Trimmomatic-0.39/trimmomatic-0.39.jar SE -threads 8 -phred33 {input} {output} HEADCROP:8 SLIDINGWINDOW:4:15 CROP:250"
 
      #Fastqc
     rule fastqc:
@@ -429,7 +376,7 @@ else :
         output:
             output_dir+"/{seq_name}/report_{seq_name}/"+"{seq_name}_R1_001.paired.trim_fastqc.html",
         params:
-            base_dir=config["dir"]["base"]
+            base_dir=output_dir
         container:
             "docker://ngsom/tumorseq"
         shell:
@@ -490,7 +437,7 @@ rule samtools_index :
 rule GATK_dedup_spark :
     input:
         bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG."+"bam",
-        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG."+"bam.bai",
+        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG."+"bai",
         ref=config["genome"]["fasta_file"],
     output:
         temp(output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+".dedup."+"bam"),
@@ -498,7 +445,7 @@ rule GATK_dedup_spark :
     container:
         "docker://broadinstitute/gatk:4.2.2.0"
     params:
-        base_dir=config["dir"]["base"]
+        base_dir=output_dir
     shell:
         """
         gatk MarkDuplicatesSpark \ 
@@ -535,8 +482,8 @@ rule picard_add_group :
         bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"bam",
         index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"bam.bai",
     output:
-        temp(output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG."+"bam"),
-        temp(output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG."+"bam.bai")
+        bam=temp(output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG."+"bam"),
+        index=temp(output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG."+"bai")
     container:
         "docker://ngsom/tumorseq"
     params:
@@ -544,51 +491,53 @@ rule picard_add_group :
         RGPL=config["metadata"]["platform"],
         RGCN=config["metadata"]["center"],
         RGDT=config['metadata']['date'],
+        base_dir=output_dir
     shell :"""java -XX:ParallelGCThreads=2 -Xmx16G -jar /usr/share/java/picard.jar AddOrReplaceReadGroups \
-           -I {input.bam} \
-           -O {output} \
-           -RGID {wildcards.seq_name} \
-           -RGLB {params.RGLB} \
-           -RGPL {params.RGPL} \
-           -RGPU barcode \
-           -RGSM {wildcards.seq_name} \
-           -RGCN {params.RGCN} \
-           -RGDS description \
-           -RGDT {params.RGDT} \
-           -VALIDATION_STRINGENCY SILENT \
-            -CREATE_INDEX true"""
+        -I {input.bam} \
+        -O {output.bam} \
+        -RGID {wildcards.seq_name} \
+        -RGLB {params.RGLB} \
+        -RGPL {params.RGPL} \
+        -RGPU barcode \
+        -RGSM {wildcards.seq_name} \
+        -RGCN {params.RGCN} \
+        -RGDS description \
+        -RGDT {params.RGDT} \
+        -VALIDATION_STRINGENCY SILENT \
+        -CREATE_INDEX true
+        """
 
 
 rule GATK_recalibrate_spark :
     input:
-        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"bam.bai",
+        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"bai",
         bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"bam",
         ref=config["genome"]["fasta_file"],
         known_indel1=config["genome"]["known_indel1"],
         known_indel2=config["genome"]["known_indel2"],
         target=config["metadata"]["design"],
     output:
-        output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam",
-        output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bai"
+        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam",
+        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam.bai"
     container:
         "docker://broadinstitute/gatk:4.2.2.0"
     params:
-        base_dir=config["dir"]["base"]
+        base_dir=output_dir
     shell:"""
         gatk BaseRecalibratorSpark \
         --java-options -Xmx16G \
         --spark-master local[8] \
         -R {input.ref} \
         -I {input.bam} \
-        --known-sites $variants_file \
+        --known-sites /shared/projects/pmngs/human_genome_hg19/annot/dbsnp_138.hg19.vcf.gz \
         -O {params.base_dir}/{wildcards.seq_name}/{wildcards.seq_name}.grp 
         gatk ApplyBQSRSpark \
         --java-options -Xmx16G \
         --spark-master local[8] \
         -R {input.ref} \
-        -I $bam \
+        -I {input.bam} \
         --bqsr-recal-file {params.base_dir}/{wildcards.seq_name}/{wildcards.seq_name}.grp \
-        -O {output}
+        -O {output.bam}
         """
 
 rule Delly :
@@ -601,7 +550,7 @@ rule Delly :
     conda:
         env_file_sv
     params:
-        base_dir=config["dir"]["base"]
+        base_dir=output_dir
     shell:
         """
         delly call -x {input.region_to_exclude} -g {input.ref} -o {params.base_dir}/{wildcards.seq_name}/Delly/{wildcards.seq_name}.Delly.bcf {input.bam}
@@ -616,7 +565,7 @@ rule vcf2tab :
     conda:
         env_file_sv
     params:
-        base_dir=config["dir"]["base"]
+        base_dir=output_dir
     shell:"""
         dellyVcf2TabScript.py {input.vcf} {params.base_dir}/{wildcards.seq_name}/Delly
         awk 'BEGIN{{OFS="\t"}} NR>1{{ gsub("chr","",$FN) }}{{print $FN}}' {params.base_dir}/{wildcards.seq_name}/Delly/{wildcards.seq_name}.Delly.tab > {params.base_dir}/{wildcards.seq_name}/Delly/{wildcards.seq_name}.Delly.tab.tmp
@@ -631,7 +580,7 @@ rule filterDellyCalls :
     conda:
         env_file_sv
     params:
-        base_dir=config["dir"]["base"]
+        base_dir=output_dir
     shell:"""
         FilterDellyCalls.py -p 1 -f Delly {input.vcf} {params.base_dir}/{wildcards.seq_name}/Delly/{wildcards.seq_name}.Delly
         """
@@ -652,7 +601,7 @@ rule iAnnotSV :
     conda:
         env_file_sv
     params:
-        base_dir=config["dir"]["base"]
+        base_dir=output_dir
     shell:
         """
         iAnnotateSV.py \
@@ -679,7 +628,7 @@ rule MergeDellyAnnotAndStat :
     conda:
         env_file_sv
     params:
-        base_dir=config["dir"]["base"]
+        base_dir=output_dir
     shell:"""
         paste {input.stat} {input.annot} > {output}
         """
@@ -698,8 +647,8 @@ rule mergeSVResultFiles :
 
 rule freebayes :
     input :
-        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"realigned.recall."+"bam",
-        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"realigned.recall."+"bam.bai",
+        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam",
+        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam.bai",
         ref=config["genome"]["fasta_file"],
         target=config["metadata"]["design"],
     output :
@@ -726,14 +675,14 @@ rule freebayes :
 
 rule GATK_left_align_freebayes :
     input:
-        vcf=output_dir+"/{seq_name}/FreeBayes/{seq_name}.FreeBayes.vcf"
-        ref=config["genome"]["fasta_file"],
+        vcf=output_dir+"/{seq_name}/FreeBayes/{seq_name}.FreeBayes.vcf",
+        ref=config["genome"]["fasta_file"]
     output:
         output_dir+"/{seq_name}/FreeBayes/{seq_name}.FreeBayes.LeftAlign.vcf"
     container:
         "docker://broadinstitute/gatk:4.2.2.0"
     params:
-        base_dir=config["dir"]["base"]
+        base_dir=output_dir
     shell:"""
         # Left Align
         gatk LeftAlignAndTrimVariants \
@@ -753,7 +702,7 @@ rule split_snp_indel_freebayes :
     container:
         "docker://ngsom/tumorseq"
     params:
-        base_dir=config["dir"]["base"]
+        base_dir=output_dir
     shell:"""
         vcftools --vcf {input.vcf} --keep-only-indels --recode --recode-INFO-all --out {params.base_dir}/{wildcards.seq_name}/FreeBayes/{wildcards.seq_name}.INDEL.FreeBayes.LeftAlign
         mv {params.base_dir}/{wildcards.seq_name}/FreeBayes/{wildcards.seq_name}.INDEL.FreeBayes.LeftAlign.recode.vcf {params.base_dir}/{wildcards.seq_name}/FreeBayes/{wildcards.seq_name}.INDEL.FreeBayes.LeftAlign.vcf
@@ -763,30 +712,31 @@ rule split_snp_indel_freebayes :
 
 rule vardict :
     input :
-        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"realigned.recall."+"bam",
-        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"realigned.recall."+"bam.bai",
+        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam",
+        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam.bai",
         ref=config["genome"]["fasta_file"],
         target=config["metadata"]["design"],
     output :
         output_dir+"/{seq_name}/VarDict/{seq_name}.VarDict.vcf"
     container:
         "docker://ngsom/tumorseq"
-    script:
-        dedup = params.dedup ? "--dedup" : ''
+    params:
+        base_dir=output_dir,
+        dedup=dedup_option_vardict
     shell:"""
-    VarDict {dedup} -th 8 -G {input.ref} -f 0.02 -N {wildcards.seq_name} -b {input.bam} -c 1 -S 2 -E 3 -g 4 {input.target} | teststrandbias.R | var2vcf_valid.pl -N {wildcards.seq_name} -E -f 0.02 > {wildcards.seq_name}.VarDict.vcf
+    VarDict {params.dedup} -th 8 -G {input.ref} -f 0.02 -N {wildcards.seq_name} -b {input.bam} -c 1 -S 2 -E 3 -g 4 {input.target} | teststrandbias.R | var2vcf_valid.pl -N {wildcards.seq_name} -E -f 0.02 > {params.base_dir}/{wildcards.seq_name}/VarDict/{wildcards.seq_name}.VarDict.vcf
     """
 
 rule GATK_left_align_vardict :
     input:
-        vcf=output_dir+"/{seq_name}/VarDict/{seq_name}.VarDict.vcf"
-        ref=config["genome"]["fasta_file"],
+        vcf=output_dir+"/{seq_name}/VarDict/{seq_name}.VarDict.vcf",
+        ref=config["genome"]["fasta_file"]
     output:
         output_dir+"/{seq_name}/VarDict/{seq_name}.VarDict.LeftAlign.vcf"
     container:
         "docker://broadinstitute/gatk:4.2.2.0"
     params:
-        base_dir=config["dir"]["base"]
+        base_dir=output_dir
     shell:"""
         # Left Align
         gatk LeftAlignAndTrimVariants \
@@ -806,7 +756,7 @@ rule split_snp_indel_vardict :
     container:
         "docker://ngsom/tumorseq"
     params:
-        base_dir=config["dir"]["base"]
+        base_dir=output_dir
     shell:"""
         vcftools --vcf {input.vcf} --keep-only-indels --recode --recode-INFO-all --out {params.base_dir}/{wildcards.seq_name}/VarDict/{wildcards.seq_name}.INDEL.VarDict.LeftAlign
         mv {params.base_dir}/{wildcards.seq_name}/VarDict/{wildcards.seq_name}.INDEL.VarDict.LeftAlign.recode.vcf {params.base_dir}/{wildcards.seq_name}/VarDict/{wildcards.seq_name}.INDEL.VarDict.LeftAlign.vcf
@@ -816,8 +766,8 @@ rule split_snp_indel_vardict :
 
 rule scalpel :
     input :
-        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"realigned.recall."+"bam",
-        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"realigned.recall."+"bam.bai",
+        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam",
+        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam.bai",
         ref=config["genome"]["fasta_file"],
         target=config["metadata"]["design"],
     output :
@@ -825,7 +775,7 @@ rule scalpel :
     container:
         "docker://ngsom/tumorseq"
     params:
-        base_dir=config["dir"]["base"]
+        base_dir=output_dir
     shell:"""
     scalpel-discovery --single --bam {input.bam} --bed {input.target} --ref {input.ref} --dir {params.base_dir}/{wildcards.seq_name}/Scalpel --numprocs 8 --intarget
     scalpel-export --single --db {params.base_dir}/{wildcards.seq_name}/Scalpel/variants.db.dir --bed {input.target} --ref {input.ref} --min-alt-count 2 --min-vaf 0.02 --min-coverage 10 --intarget > {output}
@@ -833,14 +783,14 @@ rule scalpel :
 
 rule GATK_left_align_scalpel :
     input:
-        vcf=output_dir+"/{seq_name}/Scalpel/{seq_name}.INDEL.Scalpel.vcf"
-        ref=config["genome"]["fasta_file"],
+        vcf=output_dir+"/{seq_name}/Scalpel/{seq_name}.INDEL.Scalpel.vcf",
+        ref=config["genome"]["fasta_file"]
     output:
         output_dir+"/{seq_name}/Scalpel/{seq_name}.INDEL.Scalpel.LeftAlign.vcf"
     container:
         "docker://broadinstitute/gatk:4.2.2.0"
     params:
-        base_dir=config["dir"]["base"]
+        base_dir=output_dir
     shell:"""
         # Left Align
         gatk LeftAlignAndTrimVariants \
@@ -853,8 +803,8 @@ rule GATK_left_align_scalpel :
 
 rule pisces :
     input :
-        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"realigned.recall."+"bam",
-        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"realigned.recall."+"bam.bai",
+        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam",
+        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam.bai",
         ref=config["genome"]["fasta_file"],
         target=config["metadata"]["design"],
     output :
@@ -862,24 +812,23 @@ rule pisces :
     container:
         "docker://ngsom/tumorseq"
     params:
-        base_dir=config["dir"]["base"]
-    script:
-        dedup = params.dedup ? "--dedup" : ''
+        base_dir=output_dir,
+        dedup=dedup_option_pisces
     shell:"""
-    dotnet /opt/Pisces/Pisces.dll -bam {input.bam} -g /shared/ifbstor1/projects/pmngs/Homo_sapiens/UCSC/hg19/Sequence/WholeGenomeFasta {dedup} --gvcf false -i {input.target} -t 8 --minbq 20 --minmq 30 --mindp 10 --minvf 0.02 --callmnvs true --threadbychr true --outfolder {params.base_dir}/{wildcards.seq_name}/Pisces
-    mv {params.base_dir}/{wildcards.seq_name}/Pisces/{wildcards.seq_name}.sort.RG.recalibrate.vcf {output}
+    dotnet /opt/Pisces/Pisces.dll -bam {input.bam} -g /shared/ifbstor1/projects/pmngs/Homo_sapiens/UCSC/hg19/Sequence/WholeGenomeFasta {params.dedup} --gvcf false -i {input.target} -t 8 --minbq 20 --minmq 30 --mindp 10 --minvf 0.02 --callmnvs true --threadbychr true --outfolder {params.base_dir}/{wildcards.seq_name}/Pisces
+    mv {params.base_dir}/{wildcards.seq_name}/Pisces/{wildcards.seq_name}.sort.RG.recall.vcf {output}
     """
 
 rule GATK_left_align_pisces :
     input:
-        vcf=output_dir+"/{seq_name}/Pisces/{seq_name}.Pisces.vcf"
-        ref=config["genome"]["fasta_file"],
+        vcf=output_dir+"/{seq_name}/Pisces/{seq_name}.Pisces.vcf",
+        ref=config["genome"]["fasta_file"]
     output:
         output_dir+"/{seq_name}/Pisces/{seq_name}.Pisces.LeftAlign.vcf"
     container:
         "docker://broadinstitute/gatk:4.2.2.0"
     params:
-        base_dir=config["dir"]["base"]
+        base_dir=output_dir
     shell:"""
         # Left Align
         gatk LeftAlignAndTrimVariants \
@@ -899,7 +848,7 @@ rule split_snp_indel_pisces :
     container:
         "docker://ngsom/tumorseq"
     params:
-        base_dir=config["dir"]["base"]
+        base_dir=output_dir
     shell:"""
         vcftools --vcf {input.vcf} --keep-only-indels --recode --recode-INFO-all --out {params.base_dir}/{wildcards.seq_name}/Pisces/{wildcards.seq_name}.INDEL.Pisces.LeftAlign
         mv {params.base_dir}/{wildcards.seq_name}/Pisces/{wildcards.seq_name}.INDEL.Pisces.LeftAlign.recode.vcf {params.base_dir}/{wildcards.seq_name}/Pisces/{wildcards.seq_name}.INDEL.Pisces.LeftAlign.vcf
@@ -909,8 +858,8 @@ rule split_snp_indel_pisces :
 
 rule platypus :
     input :
-        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"realigned.recall."+"bam",
-        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"realigned.recall."+"bam.bai",
+        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam",
+        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam.bai",
         ref=config["genome"]["fasta_file"],
         target=config["metadata"]["design"],
     output :
@@ -918,24 +867,23 @@ rule platypus :
     container:
         "docker://ngsom/tumorseq"
     params:
-        base_dir=config["dir"]["base"]
-    script:
-        dedup = params.dedup ? "--dedup" : ''
+        base_dir=output_dir,
+        dedup = dedup_option_platypus
     shell:"""
         source activate platypus
-        platypus callVariants --nCPU=8 --bamFiles={input.bam} --refFile={input.ref} --output={output} {dedup} --minFlank=0 --regions=$design --minBaseQual=20 --minMapQual=30 --minVarFreq=0.02
+        platypus callVariants --nCPU=8 --bamFiles={input.bam} --refFile={input.ref} --output={output} {params.dedup} --minFlank=0 --regions={input.target} --minBaseQual=20 --minMapQual=30 --minVarFreq=0.02
     """
 
 rule GATK_left_align_platypus :
     input:
-        vcf=output_dir+"/{seq_name}/Platypus/{seq_name}.Platypus.vcf"
-        ref=config["genome"]["fasta_file"],
+        vcf=output_dir+"/{seq_name}/Platypus/{seq_name}.Platypus.vcf",
+        ref=config["genome"]["fasta_file"]
     output:
         output_dir+"/{seq_name}/Platypus/{seq_name}.Platypus.LeftAlign.vcf"
     container:
         "docker://broadinstitute/gatk:4.2.2.0"
     params:
-        base_dir=config["dir"]["base"]
+        base_dir=output_dir
     shell:"""
         # Left Align
         gatk LeftAlignAndTrimVariants \
@@ -955,7 +903,7 @@ rule split_snp_indel_platypus :
     container:
         "docker://ngsom/tumorseq"
     params:
-        base_dir=config["dir"]["base"]
+        base_dir=output_dir
     shell:"""
         vcftools --vcf {input.vcf} --keep-only-indels --recode --recode-INFO-all --out {params.base_dir}/{wildcards.seq_name}/Platypus/{wildcards.seq_name}.INDEL.Platypus.LeftAlign
         mv {params.base_dir}/{wildcards.seq_name}/Platypus/{wildcards.seq_name}.INDEL.Platypus.LeftAlign.recode.vcf {params.base_dir}/{wildcards.seq_name}/Platypus/{wildcards.seq_name}.INDEL.Platypus.LeftAlign.vcf
@@ -965,8 +913,8 @@ rule split_snp_indel_platypus :
 
 rule GATK_haplotypecaller :
     input:
-        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"realigned.recall."+"bam",
-        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"realigned.recall."+"bam.bai",
+        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam",
+        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam.bai",
         ref=config["genome"]["fasta_file"],
         target=config["metadata"]["design"],
     output:
@@ -974,28 +922,28 @@ rule GATK_haplotypecaller :
     container:
         "docker://broadinstitute/gatk:4.2.2.0"
     params:
-        base_dir=config["dir"]["base"]
+        base_dir=output_dir
     shell:"""
         # Variant calling
         gatk HaplotypeCaller \
         --java-options -Xmx16G \
         --native-pair-hmm-threads 8 \
         --reference {input.ref} \
-        -L ${input.target} \
+        -L {input.target} \
         --output  {output} \
         -I {input.bam} \
         """
 
 rule GATK_left_align_hc :
     input:
-        vcf=output_dir+"/{seq_name}/HaplotypeCaller/{seq_name}.HaplotypeCaller.vcf"
-        ref=config["genome"]["fasta_file"],
+        vcf=output_dir+"/{seq_name}/HaplotypeCaller/{seq_name}.HaplotypeCaller.vcf",
+        ref=config["genome"]["fasta_file"]
     output:
         output_dir+"/{seq_name}/HaplotypeCaller/{seq_name}.HaplotypeCaller.LeftAlign.vcf"
     container:
         "docker://broadinstitute/gatk:4.2.2.0"
     params:
-        base_dir=config["dir"]["base"]
+        base_dir=output_dir
     shell:"""
         # Left Align
         gatk LeftAlignAndTrimVariants \
@@ -1015,7 +963,7 @@ rule split_snp_indel_hc :
     container:
         "docker://ngsom/tumorseq"
     params:
-        base_dir=config["dir"]["base"]
+        base_dir=output_dir
     shell:"""
         vcftools --vcf {input.vcf} --keep-only-indels --recode --recode-INFO-all --out {params.base_dir}/{wildcards.seq_name}/HaplotypeCaller/{wildcards.seq_name}.INDEL.HaplotypeCaller.LeftAlign
         mv {params.base_dir}/{wildcards.seq_name}/HaplotypeCaller/{wildcards.seq_name}.INDEL.HaplotypeCaller.LeftAlign.recode.vcf {params.base_dir}/{wildcards.seq_name}/HaplotypeCaller/{wildcards.seq_name}.INDEL.HaplotypeCaller.LeftAlign.vcf
@@ -1025,8 +973,8 @@ rule split_snp_indel_hc :
 
 rule varscan2_snp :
     input:
-        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"realigned.recall."+"bam",
-        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"realigned.recall."+"bam.bai",
+        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam",
+        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam.bai",
         ref=config["genome"]["fasta_file"],
         target=config["metadata"]["design"],
     output:
@@ -1051,14 +999,14 @@ rule varscan2_snp :
 
 rule GATK_left_align_varscan2_snp :
     input:
-        vcf=output_dir+"/{seq_name}/VarScan2/{seq_name}.SNP.VarScan2.vcf"
-        ref=config["genome"]["fasta_file"],
+        vcf=output_dir+"/{seq_name}/VarScan2/{seq_name}.SNP.VarScan2.vcf",
+        ref=config["genome"]["fasta_file"]
     output:
         output_dir+"/{seq_name}/VarScan2/{seq_name}.SNP.VarScan2.LeftAlign.vcf"
     container:
         "docker://broadinstitute/gatk:4.2.2.0"
     params:
-        base_dir=config["dir"]["base"]
+        base_dir=output_dir
     shell:"""
         # Left Align
         gatk LeftAlignAndTrimVariants \
@@ -1072,8 +1020,8 @@ rule GATK_left_align_varscan2_snp :
 
 rule varscan2_indel :
     input:
-        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"realigned.recall."+"bam",
-        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"realigned.recall."+"bam.bai",
+        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam",
+        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam.bai",
         ref=config["genome"]["fasta_file"],
         target=config["metadata"]["design"],
     output:
@@ -1098,14 +1046,14 @@ rule varscan2_indel :
 
 rule GATK_left_align_varscan2_indel :
     input:
-        vcf=output_dir+"/{seq_name}/VarScan2/{seq_name}.INDEL.VarScan2.vcf"
-        ref=config["genome"]["fasta_file"],
+        vcf=output_dir+"/{seq_name}/VarScan2/{seq_name}.INDEL.VarScan2.vcf",
+        ref=config["genome"]["fasta_file"]
     output:
         output_dir+"/{seq_name}/VarScan2/{seq_name}.INDEL.VarScan2.LeftAlign.vcf"
     container:
         "docker://broadinstitute/gatk:4.2.2.0"
     params:
-        base_dir=config["dir"]["base"]
+        base_dir=output_dir
     shell:"""
         # Left Align
         gatk LeftAlignAndTrimVariants \
@@ -1118,8 +1066,8 @@ rule GATK_left_align_varscan2_indel :
 
 rule PileupSummaries :
     input:
-        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"realigned.recall."+"bam",
-        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"realigned.recall."+"bam.bai",
+        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam",
+        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam.bai",
         ref=config["genome"]["fasta_file"],
         target=config["metadata"]["design"],
     output:
@@ -1152,14 +1100,14 @@ rule CalculateContamination :
         # Calculate contamination
         gatk CalculateContamination \
         --java-options -Xmx16G \
-        -I ${input.pileup} \
+        -I {input.pileup} \
         -O {output}
     """
 
-rule picard_cellect_seq_artefacts :
+rule picard_collect_seq_artefacts :
     input:
-        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"bam",
-        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"bam.bai",
+        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam",
+        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam.bai",
         ref=config["genome"]["fasta_file"]
     output:
         output_dir+"/{seq_name}/QC/{seq_name}.pre_adapter_detail_metrics.txt",
@@ -1181,8 +1129,8 @@ rule picard_cellect_seq_artefacts :
 
 rule mutect2_tumor_only :
     input:
-        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"realigned.recall."+"bam",
-        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"realigned.recall."+"bam.bai",
+        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam",
+        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam.bai",
         ref=config["genome"]["fasta_file"],
         target=config["metadata"]["design"],
     output:
@@ -1256,7 +1204,7 @@ rule GATK_left_align_mutect2 :
     container:
         "docker://broadinstitute/gatk:4.2.2.0"
     params:
-        base_dir=config["dir"]["base"]
+        base_dir=output_dir
     shell:"""
         # Left Align
         gatk LeftAlignAndTrimVariants \
@@ -1277,7 +1225,7 @@ rule GATK_split_snp_indel_mutect2 :
     container:
         "docker://broadinstitute/gatk:4.2.2.0"
     params:
-        base_dir=config["dir"]["base"]
+        base_dir=output_dir
     shell:"""
         gatk SelectVariants --java-options -Xmx16G -R {input.ref} -V {input.vcf} --select-type-to-include SNP -O {params.base_dir}/{wildcards.seq_name}/Mutect2/{wildcards.seq_name}.SNP.Mutect2.LeftAlign.vcf
         gatk SelectVariants --java-options -Xmx16G -R {input.ref} -V {input.vcf} --select-type-to-include INDEL -O {params.base_dir}/{wildcards.seq_name}/Mutect2/{wildcards.seq_name}.INDEL.Mutect2.LeftAlign.vcf
@@ -1285,34 +1233,34 @@ rule GATK_split_snp_indel_mutect2 :
 
 rule lofreq :
     input :
-        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"realigned.recall."+"bam",
-        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"realigned.recall."+"bam.bai",
+        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam",
+        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam.bai",
         ref=config["genome"]["fasta_file"],
         target=config["metadata"]["design"],
     output :
-        temp(output_dir+"/{seq_name}/LoFreq/{seq_name}.dindel.bam"),
-        temp(output_dir+"/{seq_name}/LoFreq/{seq_name}.dindel.bam.bai"),
-        output_dir+"/{seq_name}/LoFreq/{seq_name}.LoFreq.vcf",
+        dindel_bam=temp(output_dir+"/{seq_name}/LoFreq/{seq_name}.dindel.bam"),
+        dindel_index=temp(output_dir+"/{seq_name}/LoFreq/{seq_name}.dindel.bam.bai"),
+        dindel_vcf=output_dir+"/{seq_name}/LoFreq/{seq_name}.LoFreq.vcf",
     container:
         "docker://ngsom/tumorseq"
     params:
-        base_dir=config["dir"]["base"]
+        base_dir=output_dir
     shell:"""
         lofreq indelqual --dindel --ref {input.ref} -o {params.base_dir}/{wildcards.seq_name}/LoFreq/{wildcards.seq_name}.dindel.bam {input.bam}
         samtools index {params.base_dir}/{wildcards.seq_name}/LoFreq/{wildcards.seq_name}.dindel.bam
-        lofreq call-parallel --pp-threads 8 --call-indels -f {input.ref} -l {input.target} -C 10 -o {output} {params.base_dir}/{wildcards.seq_name}/LoFreq/{wildcards.seq_name}.dindel.bam
+        lofreq call-parallel --pp-threads 8 --call-indels -f {input.ref} -l {input.target} -C 10 -o {output.dindel_vcf} {params.base_dir}/{wildcards.seq_name}/LoFreq/{wildcards.seq_name}.dindel.bam
     """
 
 rule GATK_left_align_lofreq :
     input:
-        vcf=output_dir+"/{seq_name}/LoFreq/{seq_name}.LoFreq.vcf"
-        ref=config["genome"]["fasta_file"],
+        vcf=output_dir+"/{seq_name}/LoFreq/{seq_name}.LoFreq.vcf",
+        ref=config["genome"]["fasta_file"]
     output:
         output_dir+"/{seq_name}/LoFreq/{seq_name}.LoFreq.LeftAlign.vcf"
     container:
         "docker://broadinstitute/gatk:4.2.2.0"
     params:
-        base_dir=config["dir"]["base"]
+        base_dir=output_dir
     shell:"""
         # Left Align
         gatk LeftAlignAndTrimVariants \
@@ -1332,7 +1280,7 @@ rule split_snp_indel_lofreq :
     container:
         "docker://ngsom/tumorseq"
     params:
-        base_dir=config["dir"]["base"]
+        base_dir=output_dir
     shell:"""
         vcftools --vcf {input.vcf} --keep-only-indels --recode --recode-INFO-all --out {params.base_dir}/{wildcards.seq_name}/LoFreq/{wildcards.seq_name}.INDEL.LoFreq.LeftAlign
         mv {params.base_dir}/{wildcards.seq_name}/LoFreq/{wildcards.seq_name}.INDEL.LoFreq.LeftAlign.recode.vcf {params.base_dir}/{wildcards.seq_name}/LoFreq/{wildcards.seq_name}.INDEL.LoFreq.LeftAlign.vcf
@@ -1342,45 +1290,48 @@ rule split_snp_indel_lofreq :
 
 rule prepare_pindel :
     input:
-        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"realigned.recall."+"bam",
+        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam",
+        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam.bai",
     output:
-        output_dir+"/{seq_name}/pindel/{seq_name}.pindel.config.txt"
+        temp(output_dir+"/{seq_name}/pindel/{seq_name}.pindel.config.txt")
     container:
         "docker://ngsom/tumorseq"
     shell:
-        "echo -e \"{input}\t150\t{wildcards.seq_name}\" > {output}"
+        "echo -e \"{input.bam}\t150\t{wildcards.seq_name}\" > {output}"
 
 rule pindel :
     input:
         config=output_dir+"/{seq_name}/pindel/{seq_name}.pindel.config.txt",
-        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"realigned.recall."+"bam",
-        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"realigned.recall."+"bam.bai",
-        ref=config["genome"]["fasta_file"],
-        bed=output_dir+"/{chr}.bed"
+        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam",
+        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam.bai",
+        ref=config["genome"]["fasta_file"]
     output:
-        temp(output_dir+"/{seq_name}/pindel/{seq_name}.{chr}.INDEL_SI"),
-        temp(output_dir+"/{seq_name}/pindel/{seq_name}.{chr}.INDEL_D"),
-        temp(output_dir+"/{seq_name}/pindel/{seq_name}.{chr}.INDEL_LI"),
-        temp(output_dir+"/{seq_name}/pindel/{seq_name}.{chr}.INDEL_INV"),
-        temp(output_dir+"/{seq_name}/pindel/{seq_name}.{chr}.INDEL_TD"),
-        temp(output_dir+"/{seq_name}/pindel/{seq_name}.{chr}.INDEL_BP"),
+        temp(output_dir+"/{seq_name}/pindel/tmp/{seq_name}.{chr}.INDEL_SI"),
+        temp(output_dir+"/{seq_name}/pindel/tmp/{seq_name}.{chr}.INDEL_D"),
+        temp(output_dir+"/{seq_name}/pindel/tmp/{seq_name}.{chr}.INDEL_LI"),
+        temp(output_dir+"/{seq_name}/pindel/tmp/{seq_name}.{chr}.INDEL_INV"),
+        temp(output_dir+"/{seq_name}/pindel/tmp/{seq_name}.{chr}.INDEL_TD"),
+        temp(output_dir+"/{seq_name}/pindel/tmp/{seq_name}.{chr}.INDEL_BP"),
+        temp(output_dir+"/{seq_name}/pindel/tmp/{seq_name}.{chr}.INDEL_CloseEndMapped"),
+        temp(output_dir+"/{seq_name}/pindel/tmp/{seq_name}.{chr}.INDEL_INT_final"),
+        temp(output_dir+"/{seq_name}/pindel/tmp/{seq_name}.{chr}.INDEL_RP"),
     container:
         "docker://ngsom/tumorseq"
     params:
         base_dir=output_dir
     shell:
         """
-        pindel -T 4 -f {input.ref} -i {input.config} --chromosome {wildcards.chr} -w 10 -M 5 -o {params.base_dir}/{wildcards.seq_name}/pindel/{wildcards.seq_name}.{wildcards.chr}.INDEL
+        pindel -T 4 -f {input.ref} -i {input.config} --chromosome {wildcards.chr} -w 10 -M 5 -o {params.base_dir}/{wildcards.seq_name}/pindel/tmp/{wildcards.seq_name}.{wildcards.chr}.INDEL
         """
 
 rule merge_pindel_files :
     input:
-        SI=expand(output_dir+"/{{seq_name}}/pindel/{{seq_name}}.{chr}.INDEL_SI",chr=CHROMS),
-        D=expand(output_dir+"/{{seq_name}}/pindel/{{seq_name}}.{chr}.INDEL_D",chr=CHROMS),
-        LI=expand(output_dir+"/{{seq_name}}/pindel/{{seq_name}}.{chr}.INDEL_LI",chr=CHROMS),
-        INV=expand(output_dir+"/{{seq_name}}/pindel/{{seq_name}}.{chr}.INDEL_INV",chr=CHROMS),
-        TD=expand(output_dir+"/{{seq_name}}/pindel/{{seq_name}}.{chr}.INDEL_TD",chr=CHROMS),
-        BP=expand(output_dir+"/{{seq_name}}/pindel/{{seq_name}}.{chr}.INDEL_BP",chr=CHROMS),
+        SI=expand(output_dir+"/{{seq_name}}/pindel/tmp/{{seq_name}}.{chr}.INDEL_SI",chr=CHROMS),
+        D=expand(output_dir+"/{{seq_name}}/pindel/tmp/{{seq_name}}.{chr}.INDEL_D",chr=CHROMS),
+        LI=expand(output_dir+"/{{seq_name}}/pindel/tmp/{{seq_name}}.{chr}.INDEL_LI",chr=CHROMS),
+        INV=expand(output_dir+"/{{seq_name}}/pindel/tmp/{{seq_name}}.{chr}.INDEL_INV",chr=CHROMS),
+        TD=expand(output_dir+"/{{seq_name}}/pindel/tmp/{{seq_name}}.{chr}.INDEL_TD",chr=CHROMS),
+        BP=expand(output_dir+"/{{seq_name}}/pindel/tmp/{{seq_name}}.{chr}.INDEL_BP",chr=CHROMS),
     output:
         temp(output_dir+"/{seq_name}/pindel/{seq_name}.merge.INDEL_SI"),
         temp(output_dir+"/{seq_name}/pindel/{seq_name}.merge.INDEL_D"),
@@ -1411,8 +1362,8 @@ rule pindel2vcf :
         INV_file=output_dir+"/{seq_name}/pindel/{seq_name}.merge.INDEL_INV",
         TD_file=output_dir+"/{seq_name}/pindel/{seq_name}.merge.INDEL_TD",
         BP_file=output_dir+"/{seq_name}/pindel/{seq_name}.merge.INDEL_BP",
-        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"realigned.recall."+"bam",
-        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"realigned.recall."+"bam.bai",
+        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam",
+        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam.bai",
         ref=config["genome"]["fasta_file"],
     output:
         output_dir+"/{seq_name}/pindel/{seq_name}.INDEL.pindel.vcf",
@@ -1422,19 +1373,19 @@ rule pindel2vcf :
         base_dir=output_dir
     shell:
         """
-        pindel2vcf --pindel_output_root {params.base_dir}/{wildcards.seq_name}/pindel/{wildcards.seq_name}.merge.INDEL -r {params.ref} -R HG19 -d 20101123-v -w 300 -mc 10 -e 5 --het_cutoff 0.02 --hom_cutoff 0.75 -v {output}
+        pindel2vcf --pindel_output_root {params.base_dir}/{wildcards.seq_name}/pindel/{wildcards.seq_name}.merge.INDEL -r {input.ref} -R HG19 -d 20101123-v -w 300 -mc 10 -e 5 --het_cutoff 0.02 --hom_cutoff 0.75 -v {output}
         """
 
 rule GATK_left_align_pindel :
     input:
-        vcf=output_dir+"/{seq_name}/pindel/{seq_name}.INDEL.pindel.vcf"
-        ref=config["genome"]["fasta_file"],
+        vcf=output_dir+"/{seq_name}/pindel/{seq_name}.INDEL.pindel.vcf",
+        ref=config["genome"]["fasta_file"]
     output:
         output_dir+"/{seq_name}/pindel/{seq_name}.INDEL.pindel.LeftAlign.vcf"
     container:
         "docker://broadinstitute/gatk:4.2.2.0"
     params:
-        base_dir=config["dir"]["base"]
+        base_dir=output_dir
     shell:"""
         # Left Align
         gatk LeftAlignAndTrimVariants \
@@ -1464,7 +1415,7 @@ rule merge_snv_caller :
     shell:
         """
         source activate utils
-        merge_caller.py {input.freebayes_snv} {input.hc_snv} {input.lofreq_snv} {input.mutect2_snv} {input.pisces_snv} {input.platypus_snv} {input.vardict_snv} {input.varscan2_snv} {output}
+        workflow/scripts/merge_caller.py {input.freebayes_snv} {input.hc_snv} {input.lofreq_snv} {input.mutect2_snv} {input.pisces_snv} {input.platypus_snv} {input.vardict_snv} {input.varscan2_snv} {output}
         """
 
 rule merge_indel_caller :
@@ -1476,9 +1427,8 @@ rule merge_indel_caller :
         pisces_indel=output_dir+"/{seq_name}/Pisces/{seq_name}.INDEL.Pisces.LeftAlign.vcf",
         platypus_indel=output_dir+"/{seq_name}/Platypus/{seq_name}.INDEL.Platypus.LeftAlign.vcf",
         vardict_indel=output_dir+"/{seq_name}/VarDict/{seq_name}.INDEL.VarDict.LeftAlign.vcf",
-        varscan2_indel=output_dir+"/{seq_name}/VarScan2/{seq_name}.INDEL.VarScan2.LeftAlign.vcf"
-        vardict_indel=output_dir+"/{seq_name}/VarDict/{seq_name}.INDEL.VarDict.LeftAlign.vcf",
-        pindel_indel=output_dir+"/{seq_name}/pindel/{seq_name}.INDEL.pindel.LeftAlign.vcf",
+        varscan2_indel=output_dir+"/{seq_name}/VarScan2/{seq_name}.INDEL.VarScan2.LeftAlign.vcf",
+        pindel_indel=output_dir+"/{seq_name}/pindel/{seq_name}.INDEL.pindel.vcf",
         scalpel_indel=output_dir+"/{seq_name}/Scalpel/{seq_name}.INDEL.Scalpel.vcf"
     output:
         output_dir+"/{seq_name}/{seq_name}.INDEL.merge.vcf",
@@ -1489,14 +1439,14 @@ rule merge_indel_caller :
     shell:
         """
         source activate utils
-        merge_caller_indel.py {input.freebayes_indel} {input.hc_indel} {input.lofreq_indel} {input.mutect2_indel} {input.pisces_indel} {input.platypus_indel} {input.vardict_indel} {input.varscan2_indel} {input.pindel_indel} {input.scalpel_indel} {output}
+        workflow/scripts/merge_caller_indel.py {input.freebayes_indel} {input.hc_indel} {input.lofreq_indel} {input.mutect2_indel} {input.pisces_indel} {input.platypus_indel} {input.vardict_indel} {input.varscan2_indel} {input.pindel_indel} {input.scalpel_indel} {output}
         """
 
 rule filter_snv :
     input:
         vcf=output_dir+"/{seq_name}/{seq_name}.SNP.merge.vcf",
-        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"realigned.recall."+"bam",
-        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"realigned.recall."+"bam.bai",
+        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam",
+        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam.bai",
         ref=config["genome"]["fasta_file"],
     output:
         output_dir+"/{seq_name}/{seq_name}.SNP.merge.filtered.vcf",
@@ -1508,14 +1458,14 @@ rule filter_snv :
     shell:
         """
         source activate utils
-        filter_vcf.py -p 8 -f none {input.vcf} {input.bam} {input.ref} {params.base_dir}/{wildcards.seq_name}/{wildcards.seq_name}.SNP.merge
+        workflow/scripts/filter_vcf.py -p 8 -f none {input.vcf} {input.bam} {input.ref} {params.base_dir}/{wildcards.seq_name}/{wildcards.seq_name}.SNP.merge
         """
 
 rule filter_indel :
     input:
         vcf=output_dir+"/{seq_name}/{seq_name}.INDEL.merge.vcf",
-        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"realigned.recall."+"bam",
-        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"realigned.recall."+"bam.bai",
+        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam",
+        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam.bai",
         ref=config["genome"]["fasta_file"],
     output:
         output_dir+"/{seq_name}/{seq_name}.INDEL.merge.filtered.vcf",
@@ -1527,55 +1477,52 @@ rule filter_indel :
     shell:
         """
         source activate utils
-        filter_vcf.py -p 8 -f none {input.vcf} {input.bam} {input.ref} {params.base_dir}/{wildcards.seq_name}/{wildcards.seq_name}.INDEL.merge
+        workflow/scripts/filter_vcf.py -p 8 -f none {input.vcf} {input.bam} {input.ref} {params.base_dir}/{wildcards.seq_name}/{wildcards.seq_name}.INDEL.merge
         """
 
 rule annot_snp :
     input:
         vcf=output_dir+"/{seq_name}/{seq_name}.SNP.merge.filtered.vcf",
-        stats=output_dir+"/{seq_name}/{seq_name}.SNP.merge.stats"
+        stats=output_dir+"/{seq_name}/{seq_name}.SNP.merge.stats",
         annovar_db=config["annovar"]["hg19_db"]
     output:
         temp(output_dir+"/{seq_name}/{seq_name}.SNP.merge.txt"),
-        output_dir+"/{seq_name}/{seq_name}.SNP.merge.result",
+        temp(output_dir+"/{seq_name}/{seq_name}.SNP.merge.result"),
     container:
         "docker://ngsom/tumorseq"
     params:
         base_dir=output_dir
     shell:
         """
-        convert2annovar.pl {input.vcf} -format vcf4old -includeinfo --outfile {params.base_dir}/{wildcards.seq_name}/{wilcards.seq_name}.SNP.merge.txt
-	    table_annovar.pl {params.bsae_dir}/{wildcards.seq_name}/{wilcards.seq_name}.SNP.merge.txt {input.annovar_db} -buildver hg19 -remove -thread 8 -protocol refGene,exac03nontcga,kaviar_20150923,hrcr1,esp6500siv2_all,1000g2015aug_all,snp138NonFlagged,snp129,cosmic70,clinvar_20180603,dbnsfp33a -operation g,f,f,f,f,f,f,f,f,f,f -polish
-        paste {input.stats} {params.base_dir}/{wildcards.seq_name}/{wilcards.seq_name}.SNP.merge.txt.hg19_multianno.txt > {params.base_dir}/{wildcards.seq_name}/{wilcards.seq_name}.SNP.merge.result
+        convert2annovar.pl {input.vcf} -format vcf4old -includeinfo --outfile {params.base_dir}/{wildcards.seq_name}/{wildcards.seq_name}.SNP.merge.txt
+	    table_annovar.pl {params.base_dir}/{wildcards.seq_name}/{wildcards.seq_name}.SNP.merge.txt {input.annovar_db} -buildver hg19 -remove -thread 8 -protocol refGene,exac03nontcga,kaviar_20150923,hrcr1,esp6500siv2_all,1000g2015aug_all,snp138NonFlagged,snp129,cosmic70,clinvar_20180603,dbnsfp33a -operation g,f,f,f,f,f,f,f,f,f,f -polish
+        paste {input.stats} {params.base_dir}/{wildcards.seq_name}/{wildcards.seq_name}.SNP.merge.txt.hg19_multianno.txt > {params.base_dir}/{wildcards.seq_name}/{wildcards.seq_name}.SNP.merge.result
         """
 
 rule annot_indel :
     input:
         vcf=output_dir+"/{seq_name}/{seq_name}.INDEL.merge.filtered.vcf",
-        stats=output_dir+"/{seq_name}/{seq_name}.INDEL.merge.stats"
+        stats=output_dir+"/{seq_name}/{seq_name}.INDEL.merge.stats",
         annovar_db=config["annovar"]["hg19_db"]
     output:
         temp(output_dir+"/{seq_name}/{seq_name}.INDEL.merge.txt"),
-        output_dir+"/{seq_name}/{seq_name}.INDEL.merge.result",
+        temp(output_dir+"/{seq_name}/{seq_name}.INDEL.merge.result"),
     container:
         "docker://ngsom/tumorseq"
     params:
         base_dir=output_dir
     shell:
         """
-        convert2annovar.pl {input.vcf} -format vcf4old -includeinfo --outfile {params.base_dir}/{wildcards.seq_name}/{wilcards.seq_name}.INDEL.merge.txt
-	    table_annovar.pl {params.bsae_dir}/{wildcards.seq_name}/{wilcards.seq_name}.INDEL.merge.txt {input.annovar_db} -buildver hg19 -remove -thread 8 -protocol refGene,exac03nontcga,kaviar_20150923,hrcr1,esp6500siv2_all,1000g2015aug_all,snp138NonFlagged,snp129,cosmic70,clinvar_20180603,dbnsfp33a -operation g,f,f,f,f,f,f,f,f,f,f -polish
-        paste {input.stats} {params.base_dir}/{wildcards.seq_name}/{wilcards.seq_name}.INDEL.merge.txt.hg19_multianno.txt > {params.base_dir}/{wildcards.seq_name}/{wilcards.seq_name}.INDEL.merge.result
+        convert2annovar.pl {input.vcf} -format vcf4old -includeinfo --outfile {params.base_dir}/{wildcards.seq_name}/{wildcards.seq_name}.INDEL.merge.txt
+	    table_annovar.pl {params.base_dir}/{wildcards.seq_name}/{wildcards.seq_name}.INDEL.merge.txt {input.annovar_db} -buildver hg19 -remove -thread 8 -protocol refGene,exac03nontcga,kaviar_20150923,hrcr1,esp6500siv2_all,1000g2015aug_all,snp138NonFlagged,snp129,cosmic70,clinvar_20180603,dbnsfp33a -operation g,f,f,f,f,f,f,f,f,f,f -polish
+        paste {input.stats} {params.base_dir}/{wildcards.seq_name}/{wildcards.seq_name}.INDEL.merge.txt.hg19_multianno.txt > {params.base_dir}/{wildcards.seq_name}/{wildcards.seq_name}.INDEL.merge.result
         """
 
 rule qualimap :
     input:
-        bam=output_dir+"/{seq_name}/{seq_name}"+processing+"bam",
-        index=output_dir+"/{seq_name}/{seq_name}"+processing+"bam.bai",
-        target=config["metadata"]["design"],
-        cov_uniformity=output_dir+"/{seq_name}/report_{seq_name}/{seq_name}.cov.uniformity",
-        oxo_metrics=output_dir+"/{seq_name}/report_{seq_name}/{seq_name}.oxoG_metrics.txt",
-        fastqc = fastqc_output
+        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam",
+        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam.bai",
+        target=config["metadata"]["design"]
     output:
         output_dir+"/{seq_name}/QC/qualimapReport.html"
     container:
@@ -1585,12 +1532,12 @@ rule qualimap :
     shell:
         """
         awk '{{print $1"\t"$2"\t"$3"\t"$4"\t.\t." }}' {input.target} > {params.base_dir}/{wildcards.seq_name}/{wildcards.seq_name}.target.bed
-        qualimap bamqc -nt 8 -bam {input.bam} --java-mem-size=64G  -outdir {params.base_dir}/{wildcards.seq_name}/QC -gff target.bed
+        qualimap bamqc -nt 8 -bam {input.bam} --java-mem-size=64G  -outdir {params.base_dir}/{wildcards.seq_name}/QC -gff {params.base_dir}/{wildcards.seq_name}/{wildcards.seq_name}.target.bed
         """
 rule coverage_uniformity :
     input:
-        bam=output_dir+"/{seq_name}/{seq_name}"+processing+"bam",
-        index=output_dir+"/{seq_name}/{seq_name}"+processing+"bam.bai",
+        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam",
+        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam.bai",
         target=config["metadata"]["design"],
         chrLength=config["genome"]["chrLength_file"],
     output:
@@ -1602,9 +1549,9 @@ rule coverage_uniformity :
         base_dir=output_dir
     shell:
         """
-        bedtools coverage -sorted -d -g {input.chrLength} -a {input.target} -b {input.bam} > {params.base_dir}/{wildcards.seq_name}/report_{wildcards.seq_name}/{wildcards.seq_name}.cov;
+        bedtools coverage -sorted -d -g {input.chrLength} -a {input.target} -b {input.bam} > {params.base_dir}/{wildcards.seq_name}/QC/{wildcards.seq_name}.cov;
 		source activate utils2
-	    coverage_uniformity2.py {params.base_dir}/{wildcards.seq_name}/report_{wildcards.seq_name}/{wildcards.seq_name}.cov {params.base_dir}/{wildcards.seq_name}/QC/{wildcards.seq_name}.cov.uniformity
+	    workflow/scripts/coverage_uniformity2.py {params.base_dir}/{wildcards.seq_name}/QC/{wildcards.seq_name}.cov {params.base_dir}/{wildcards.seq_name}/QC/{wildcards.seq_name}.cov.uniformity
         """
 
 rule collect_metrics :
@@ -1624,12 +1571,12 @@ rule collect_metrics :
     shell:
         """
         source activate utils
-        collect_metrics2.py {input.qualimap_report} {input.cov_uni} {input.bait_bias} {input.adapt_bias} {input.error} {input.fastqc} {output}
+        workflow/scripts/collect_metrics2.py {input.qualimap_report} {input.cov_uni} {input.bait_bias} {input.adapt_bias} {input.error} {input.fastqc} {output}
         """
 
 rule mergeSNPResultFiles :
     input:
-        expand(output_dir+"/{seq_name}/{seq_name}.SNP."+output_snv+".result",seq_name=SAMPLES),
+        expand(output_dir+"/{seq_name}/{seq_name}.SNP.merge.result",seq_name=SAMPLES),
     output:
         temp(output_dir+"/SNP.summary")
     container:
@@ -1644,7 +1591,7 @@ rule mergeSNPResultFiles :
 
 rule mergeIndelResultFiles :
     input:
-        expand(output_dir+"/{seq_name}/{seq_name}.INDEL."+output_indel+".result",seq_name=SAMPLES),
+        expand(output_dir+"/{seq_name}/{seq_name}.INDEL.merge.result",seq_name=SAMPLES),
     output:
         temp(output_dir+"/INDEL.summary")
     container:
@@ -1681,7 +1628,7 @@ rule prioritizeSNP :
     shell:
         """
         source activate utils
-        prioritize_variants.py -m snp {input} {output}
+        workflow/scripts/prioritize_variants.py -m snp {input} {output}
         """
 
 rule prioritizeINDEL :
@@ -1694,7 +1641,7 @@ rule prioritizeINDEL :
     shell:
         """
         source activate utils
-        prioritize_variants.py -m indel {input} {output}
+        workflow/scripts/prioritize_variants.py -m indel {input} {output}
         """
 
 
