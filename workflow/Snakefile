@@ -773,12 +773,12 @@ rule scalpel :
     output :
         output_dir+"/{seq_name}/Scalpel/{seq_name}.INDEL.Scalpel.vcf"
     container:
-        "docker://ngsom/tumorseq"
+        "docker://lethalfang/scalpel:0.5.4"
     params:
         base_dir=output_dir
     shell:"""
-    scalpel-discovery --single --bam {input.bam} --bed {input.target} --ref {input.ref} --dir {params.base_dir}/{wildcards.seq_name}/Scalpel --numprocs 8 --intarget
-    scalpel-export --single --db {params.base_dir}/{wildcards.seq_name}/Scalpel/variants.db.dir --bed {input.target} --ref {input.ref} --min-alt-count 2 --min-vaf 0.02 --min-coverage 10 --intarget > {output}
+    /opt/scalpel-0.5.4/scalpel-discovery --single --bam {input.bam} --bed {input.target} --ref {input.ref} --dir {params.base_dir}/{wildcards.seq_name}/Scalpel --numprocs 8 --intarget
+    /opt/scalpel-0.5.4/scalpel-export --single --db {params.base_dir}/{wildcards.seq_name}/Scalpel/variants.db.dir --bed {input.target} --ref {input.ref} --min-alt-count 2 --min-vaf 0.02 --min-coverage 10 --intarget > {output}
     """
 
 rule GATK_left_align_scalpel :
@@ -816,7 +816,7 @@ rule pisces :
         dedup=dedup_option_pisces
     shell:"""
     dotnet /opt/Pisces/Pisces.dll -bam {input.bam} -g /shared/ifbstor1/projects/pmngs/Homo_sapiens/UCSC/hg19/Sequence/WholeGenomeFasta {params.dedup} --gvcf false -i {input.target} -t 8 --minbq 20 --minmq 30 --mindp 10 --minvf 0.02 --callmnvs true --threadbychr true --outfolder {params.base_dir}/{wildcards.seq_name}/Pisces
-    mv {params.base_dir}/{wildcards.seq_name}/Pisces/{wildcards.seq_name}.sort.RG.recall.vcf {output}
+    mv {params.base_dir}/{wildcards.seq_name}/Pisces/{wildcards.seq_name}.*.vcf {output}
     """
 
 rule GATK_left_align_pisces :
@@ -918,7 +918,7 @@ rule GATK_haplotypecaller :
         ref=config["genome"]["fasta_file"],
         target=config["metadata"]["design"],
     output:
-        output_dir+"/{seq_name}/HaplotypeCaller/{seq_name}.HaplotypeCaller.LeftAlign.vcf"
+        output_dir+"/{seq_name}/HaplotypeCaller/{seq_name}.HaplotypeCaller.vcf"
     container:
         "docker://broadinstitute/gatk:4.2.2.0"
     params:
@@ -1220,15 +1220,33 @@ rule GATK_split_snp_indel_mutect2 :
         vcf=output_dir+"/{seq_name}/Mutect2/{seq_name}.Mutect2.filtered.vcf",
         ref=config["genome"]["fasta_file"],
     output:
-        output_dir+"/{seq_name}/Mutect2/{seq_name}.SNP.Mutect2.LeftAlign.vcf",
-        output_dir+"/{seq_name}/Mutect2/{seq_name}.INDEL.Mutect2.LeftAlign.vcf",
+        temp(output_dir+"/{seq_name}/Mutect2/{seq_name}.SNP.Mutect2.LeftAlign.tmp.vcf"),
+        temp(output_dir+"/{seq_name}/Mutect2/{seq_name}.INDEL.Mutect2.LeftAlign.tmp.vcf"),
     container:
         "docker://broadinstitute/gatk:4.2.2.0"
     params:
         base_dir=output_dir
     shell:"""
-        gatk SelectVariants --java-options -Xmx16G -R {input.ref} -V {input.vcf} --select-type-to-include SNP -O {params.base_dir}/{wildcards.seq_name}/Mutect2/{wildcards.seq_name}.SNP.Mutect2.LeftAlign.vcf
-        gatk SelectVariants --java-options -Xmx16G -R {input.ref} -V {input.vcf} --select-type-to-include INDEL -O {params.base_dir}/{wildcards.seq_name}/Mutect2/{wildcards.seq_name}.INDEL.Mutect2.LeftAlign.vcf
+        gatk SelectVariants --java-options -Xmx16G -R {input.ref} -V {input.vcf} --select-type-to-include SNP -O {params.base_dir}/{wildcards.seq_name}/Mutect2/{wildcards.seq_name}.SNP.Mutect2.LeftAlign.tmp.vcf
+        gatk SelectVariants --java-options -Xmx16G -R {input.ref} -V {input.vcf} --select-type-to-include INDEL -O {params.base_dir}/{wildcards.seq_name}/Mutect2/{wildcards.seq_name}.INDEL.Mutect2.LeftAlign.tmp.vcf
+        """
+
+rule vcfbreak_multi_mutect2 :
+    input:
+        snp=output_dir+"/{seq_name}/Mutect2/{seq_name}.SNP.Mutect2.LeftAlign.tmp.vcf",
+        indel=output_dir+"/{seq_name}/Mutect2/{seq_name}.INDEL.Mutect2.LeftAlign.tmp.vcf",
+        ref=config["genome"]["fasta_file"]
+    output:
+        snp=output_dir+"/{seq_name}/Mutect2/{seq_name}.SNP.Mutect2.LeftAlign.vcf",
+        indel=output_dir+"/{seq_name}/Mutect2/{seq_name}.INDEL.Mutect2.LeftAlign.vcf",
+    container:
+        "docker://ngsom/tumorseq"
+    params:
+        base_dir=output_dir
+    shell:"""
+        vcflib vcfbreakmulti {input.snp} > {output.snp}
+        vcflib vcfcheck -x -f {input.ref} {input.indel} > {params.base_dir}/{wildcards.seq_name}/Mutect2/{wildcards.seq_name}.INDEL.Mutect2.LeftAlign.fix.vcf
+	vcflib vcfbreakmulti {params.base_dir}/{wildcards.seq_name}/Mutect2/{wildcards.seq_name}.INDEL.Mutect2.LeftAlign.fix.vcf > {output.indel}
         """
 
 rule lofreq :
@@ -1534,6 +1552,7 @@ rule qualimap :
         awk '{{print $1"\t"$2"\t"$3"\t"$4"\t.\t." }}' {input.target} > {params.base_dir}/{wildcards.seq_name}/{wildcards.seq_name}.target.bed
         qualimap bamqc -nt 8 -bam {input.bam} --java-mem-size=64G  -outdir {params.base_dir}/{wildcards.seq_name}/QC -gff {params.base_dir}/{wildcards.seq_name}/{wildcards.seq_name}.target.bed
         """
+        
 rule coverage_uniformity :
     input:
         bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam",

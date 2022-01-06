@@ -158,8 +158,8 @@ def parse_Mutect2indels(vcf):
 			qual = info[5]
 			filt = info[6]
 			val = info[7]
-			tlod = val.split(";")[-1]
-			tlod = tlod.split("=")[1]
+			reg="TLOD=(-?\d+\.?\d*)"
+			tlod = re.search(reg,val).group(1) if re.search(reg,val) else None
 			qual = tlod
 			indels[chrid] = {}
 			indels[chrid]['ad']=ad_sample			
