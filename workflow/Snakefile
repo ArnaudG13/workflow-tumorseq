@@ -283,8 +283,8 @@ else :
     else :
         rule all:
             input:
-                expand(output_dir+output_analysis+"/INDEL.filtered.txt"),
-                expand(output_dir+output_analysis+"/SNP.filtered.txt"),
+                #expand(output_dir+output_analysis+"/INDEL.filtered.txt"),
+                #expand(output_dir+output_analysis+"/SNP.filtered.txt"),
                 expand(output_dir+output_analysis+"/bam.stats"),
                 #expand(output_dir+output_analysis+"/merge.msi"),
                 #expand(output_dir+"/{seq_name}/{seq_name}.INDEL.{variant_caller_indel}.result",seq_name=SAMPLES,variant_caller_indel=output_indel)
@@ -434,27 +434,59 @@ rule samtools_index :
         "samtools index {input}"
 
 #Dedup Reads
-rule GATK_dedup_spark :
+#rule GATK_dedup_spark :
+#    input:
+#        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG."+"bam",
+#        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG."+"bai",
+#        ref=config["genome"]["fasta_file"],
+#    output:
+#        temp(output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+".dedup."+"bam"),
+#        temp(output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+".dedup."+"bam.bai")
+#    container:
+#        "docker://broadinstitute/gatk:4.2.2.0"
+#    params:
+#        base_dir=output_dir
+#    shell:
+#        """
+#        gatk MarkDuplicatesSpark \ 
+#        --java-options -Xmx16G \
+#        --spark-master local[8] \
+#        -R $genome \
+#        -I {input.bam} \
+#        -O {output}
+#        """
+
+rule GATK_dedup :
     input:
         bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG."+"bam",
         index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG."+"bai",
         ref=config["genome"]["fasta_file"],
     output:
         temp(output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+".dedup."+"bam"),
-        temp(output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+".dedup."+"bam.bai")
     container:
         "docker://broadinstitute/gatk:4.2.2.0"
     params:
         base_dir=output_dir
     shell:
         """
-        gatk MarkDuplicatesSpark \ 
+        gatk MarkDuplicates \
         --java-options -Xmx16G \
-        --spark-master local[8] \
-        -R $genome \
+        -R {input.ref} \
         -I {input.bam} \
+        -M {params.base_dir}/{wildcards.seq_name}/{wildcards.seq_name}.dedup.metrics \
         -O {output}
         """
+
+#Index Bam files
+rule samtools_index_dedup :
+    input:
+        output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+".dedup."+"bam"
+    output:
+        output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+".dedup."+"bam.bai"
+    container:
+        "docker://ngsom/tumorseq"
+    shell:
+        "samtools index {input}"
 
 rule samtools_uniq :
     input:
@@ -508,36 +540,69 @@ rule picard_add_group :
         """
 
 
-rule GATK_recalibrate_spark :
+#rule GATK_recalibrate_spark :
+#    input:
+#        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"bai",
+#        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"bam",
+#        ref=config["genome"]["fasta_file"],
+#        known_indel1=config["genome"]["known_indel1"],
+#        known_indel2=config["genome"]["known_indel2"],
+#        target=config["metadata"]["design"],
+#    output:
+#        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam",
+#        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam.bai"
+#    container:
+#        "docker://broadinstitute/gatk:4.2.2.0"
+#    params:
+#        base_dir=output_dir
+#    shell:"""
+#        gatk BaseRecalibratorSpark \
+#        --java-options -Xmx16G \
+#        --spark-master local[8] \
+#        -R {input.ref} \
+#        -I {input.bam} \
+#        --known-sites /shared/projects/pmngs/human_genome_hg19/annot/dbsnp_138.hg19.vcf.gz \
+#        -O {params.base_dir}/{wildcards.seq_name}/{wildcards.seq_name}.grp 
+#        gatk ApplyBQSRSpark \
+#        --java-options -Xmx16G \
+#        --spark-master local[8] \
+#        -R {input.ref} \
+#        -I {input.bam} \
+#        --bqsr-recal-file {params.base_dir}/{wildcards.seq_name}/{wildcards.seq_name}.grp \
+#        -O {output.bam}
+#        """
+
+rule GATK_recalibrate :
     input:
-        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"bai",
+        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"bam.bai",
         bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"bam",
         ref=config["genome"]["fasta_file"],
         known_indel1=config["genome"]["known_indel1"],
         known_indel2=config["genome"]["known_indel2"],
         target=config["metadata"]["design"],
     output:
+        grp=temp(output_dir+"{seq_name}/{seq_name}.grp"),
         bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam",
-        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam.bai"
+        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bai",
+        index2=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam.bai"
     container:
         "docker://broadinstitute/gatk:4.2.2.0"
     params:
         base_dir=output_dir
     shell:"""
-        gatk BaseRecalibratorSpark \
+        gatk BaseRecalibrator \
         --java-options -Xmx16G \
-        --spark-master local[8] \
         -R {input.ref} \
         -I {input.bam} \
         --known-sites /shared/projects/pmngs/human_genome_hg19/annot/dbsnp_138.hg19.vcf.gz \
-        -O {params.base_dir}/{wildcards.seq_name}/{wildcards.seq_name}.grp 
-        gatk ApplyBQSRSpark \
+        -O {output.grp} 
+        gatk ApplyBQSR \
         --java-options -Xmx16G \
-        --spark-master local[8] \
         -R {input.ref} \
         -I {input.bam} \
-        --bqsr-recal-file {params.base_dir}/{wildcards.seq_name}/{wildcards.seq_name}.grp \
+        --bqsr-recal-file {output.grp} \
         -O {output.bam}
+        cp {output.index} {output.index2}
         """
 
 rule Delly :
