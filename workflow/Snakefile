@@ -211,6 +211,22 @@ if not os.path.exists(config["iAnnotSV"]["all_canonical_txt"]) :
 if not "mode" in config["VCF_filter"].keys() :
     sys.exit("Missing parameters mode for VCF_filter")
 
+#Variant Caller used for the analysis
+if config["tools"]["snv_calling"] == "All" :
+    vc_list_snv = ['FreeBayes', 'HaplotypeCaller', 'LoFreq', 'Mutect2', 'Pisces', 'Platypus' 'VarDict', 'VarScan2']
+else :
+    vc_list_snv = config["tools"]["snv_calling"]
+    
+if config["tools"]["indel_calling"] == "All" :
+    vc_list_indel = ['FreeBayes', 'HaplotypeCaller', 'LoFreq', 'Mutect2', 'pindel', 'Pisces','Platypus', 'Scalpel' 'VarDict', 'VarScan2']
+else :
+    vc_list_indel = config["tools"]["indel_calling"]
+
+if not "n_concordant" in config["tools"].keys() :
+    sys.exit("Missing parameters n_concordant")
+else :
+    n_concordant = config["tools"]["n_concordant"]
+
 
 
 fastq_dir = config["dir"]["base"] + "/" + config["dir"]["fastq_dir"]
@@ -226,8 +242,39 @@ print("Trimming : " + str(trimming) )
 print("Molecular_barcode : " + str(molecular_barcode))
 print("Uniq Alignment : " + str(uniq))
 print("Mark duplicates : " + str(dedup))
+print(vc_list_snv)
+print(vc_list_indel)
 
 output_analysis = "/analyse_"+config["metadata"]["date"]
+freebayes_snv=output_dir+"/{seq_name}/FreeBayes/{seq_name}.SNP.FreeBayes.LeftAlign.vcf",
+#expand(output_dir+"/{seq_name}/{seq_name}.INDEL.{variant_caller_indel}.result",seq_name=SAMPLES,variant_caller_indel=output_indel)
+#get snv vcf files
+def input_snv(wildcards):
+    tab = expand(output_dir+"/{seq_name}/{variant_caller}/{seq_name}.SNP.{variant_caller}.LeftAlign.vcf",seq_name=SAMPLES,variant_caller=vc_list_snv)
+    return tab
+
+def input_snv_params(wildcards):
+    params = []
+    tab = expand(output_dir+"/{seq_name}/{variant_caller}/{seq_name}.SNP.{variant_caller}.LeftAlign.vcf",seq_name=SAMPLES,variant_caller=vc_list_snv)
+    for elt in tab :
+        for vc in vc_list_snv :
+            if re.search(vc, elt) :
+                params.append("--%s %s"%(vc, elt))
+    return params
+
+#get indel germline vcf files
+def input_indel(wildcards):
+    tab = expand(output_dir+"/{seq_name}/{variant_caller}/{seq_name}.INDEL.{variant_caller}.LeftAlign.vcf",seq_name=SAMPLES,variant_caller=vc_list_indel)
+    return tab
+
+def input_indel_params(wildcards):
+    params = []
+    tab = expand(output_dir+"/{seq_name}/{variant_caller}/{seq_name}.INDEL.{variant_caller}.LeftAlign.vcf",seq_name=SAMPLES,variant_caller=vc_list_indel)
+    for elt in tab :
+        for vc in vc_list_indel :
+            if re.search(vc, elt) :
+                params.append("--%s %s"%(vc, elt))
+    return params
 
 def fastqc_output(wildcards):
     if trimming is True :
@@ -283,15 +330,15 @@ else :
     else :
         rule all:
             input:
-                #expand(output_dir+output_analysis+"/INDEL.filtered.txt"),
-                #expand(output_dir+output_analysis+"/SNP.filtered.txt"),
+                expand(output_dir+output_analysis+"/INDEL.filtered.txt"),
+                expand(output_dir+output_analysis+"/SNP.filtered.txt"),
                 expand(output_dir+output_analysis+"/bam.stats"),
+                expand(output_dir+"/{seq_name}/QC/{seq_name}.Hsmetrics",seq_name=SAMPLES),
                 #expand(output_dir+output_analysis+"/merge.msi"),
                 #expand(output_dir+"/{seq_name}/{seq_name}.INDEL.{variant_caller_indel}.result",seq_name=SAMPLES,variant_caller_indel=output_indel)
 				#expand(output_dir+"/{seq_name}/{seq_name}.SNP.{variant_caller_snv}.result",seq_name=SAMPLES,variant_caller_snv=output_snv)
                 #expand(output_dir+"/{seq_name}/report_{seq_name}/{seq_name}.insert_size.txt",seq_name=SAMPLES),
 	            #expand(output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort.bam",seq_name=SAMPLES)
-				#expand(expand(config["dir"]["base"]+"/{tumor}_{normal}/SomaticAnalysis/{{variant_caller}}/{seq_name}_vs_{normal}.{{variant_caller}}.somatic.snv.sort.vcf",zip,tumor=TUMOR, normal=NORMAL, seq_name=SAMPLES_TUMOR),variant_caller=vc_list_snv)
 
 if paired is True :
 
@@ -538,6 +585,16 @@ rule picard_add_group :
         -VALIDATION_STRINGENCY SILENT \
         -CREATE_INDEX true
         """
+
+rule samtools_index_rg :
+    input:
+        output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG."+"bam"
+    output:
+        temp(output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG."+"bam.bai")
+    container:
+        "docker://ngsom/tumorseq"
+    shell:
+        "samtools index {input}"
 
 
 #rule GATK_recalibrate_spark :
@@ -1459,70 +1516,54 @@ rule pindel2vcf :
         pindel2vcf --pindel_output_root {params.base_dir}/{wildcards.seq_name}/pindel/{wildcards.seq_name}.merge.INDEL -r {input.ref} -R HG19 -d 20101123-v -w 300 -mc 10 -e 5 --het_cutoff 0.02 --hom_cutoff 0.75 -v {output}
         """
 
-rule GATK_left_align_pindel :
+rule pindel_filter_region :
     input:
         vcf=output_dir+"/{seq_name}/pindel/{seq_name}.INDEL.pindel.vcf",
-        ref=config["genome"]["fasta_file"]
+        ref=config["genome"]["fasta_file"],
+        target=config["metadata"]["design"]
     output:
         output_dir+"/{seq_name}/pindel/{seq_name}.INDEL.pindel.LeftAlign.vcf"
     container:
-        "docker://broadinstitute/gatk:4.2.2.0"
+        "docker://ngsom/tumorseq"
     params:
         base_dir=output_dir
     shell:"""
-        # Left Align
-        gatk LeftAlignAndTrimVariants \
-        --java-options -Xmx16G \
-        --reference {input.ref} \
-        --variant {input.vcf} \
-        --split-multi-allelics \
-        --O {output}
+        vcftools --vcf {input.vcf} --bed {input.target} --recode-INFO-all --recode --out {params.base_dir}/{wildcards.seq_name}/pindel/{wildcards.seq_name}.INDEL.pindel
+        mv {params.base_dir}/{wildcards.seq_name}/pindel/{wildcards.seq_name}.INDEL.pindel.recode.vcf {output}
         """
 
 rule merge_snv_caller :
     input:
-        freebayes_snv=output_dir+"/{seq_name}/FreeBayes/{seq_name}.SNP.FreeBayes.LeftAlign.vcf",
-        hc_snv=output_dir+"/{seq_name}/HaplotypeCaller/{seq_name}.SNP.HaplotypeCaller.LeftAlign.vcf",
-        lofreq_snv=output_dir+"/{seq_name}/LoFreq/{seq_name}.SNP.LoFreq.LeftAlign.vcf",
-        mutect2_snv=output_dir+"/{seq_name}/Mutect2/{seq_name}.SNP.Mutect2.LeftAlign.vcf",
-        pisces_snv=output_dir+"/{seq_name}/Pisces/{seq_name}.SNP.Pisces.LeftAlign.vcf",
-        platypus_snv=output_dir+"/{seq_name}/Platypus/{seq_name}.SNP.Platypus.LeftAlign.vcf",
-        vardict_snv=output_dir+"/{seq_name}/VarDict/{seq_name}.SNP.VarDict.LeftAlign.vcf",
-        varscan2_snv=output_dir+"/{seq_name}/VarScan2/{seq_name}.SNP.VarScan2.LeftAlign.vcf"
+        input_files=input_snv
     output:
         output_dir+"/{seq_name}/{seq_name}.SNP.merge.vcf",
     container:
         "docker://ngsom/tumorseq"
     params:
-        base_dir=output_dir
+        base_dir=output_dir,
+        args=input_snv_params,
+        n=n_concordant
     shell:
         """
         source activate utils
-        workflow/scripts/merge_caller.py {input.freebayes_snv} {input.hc_snv} {input.lofreq_snv} {input.mutect2_snv} {input.pisces_snv} {input.platypus_snv} {input.vardict_snv} {input.varscan2_snv} {output}
+        workflow/scripts/merge_caller.py {params.args} -N {params.n} {output}
         """
 
 rule merge_indel_caller :
     input:
-        freebayes_indel=output_dir+"/{seq_name}/FreeBayes/{seq_name}.INDEL.FreeBayes.LeftAlign.vcf",
-        hc_indel=output_dir+"/{seq_name}/HaplotypeCaller/{seq_name}.INDEL.HaplotypeCaller.LeftAlign.vcf",
-        lofreq_indel=output_dir+"/{seq_name}/LoFreq/{seq_name}.INDEL.LoFreq.LeftAlign.vcf",
-        mutect2_indel=output_dir+"/{seq_name}/Mutect2/{seq_name}.INDEL.Mutect2.LeftAlign.vcf",
-        pisces_indel=output_dir+"/{seq_name}/Pisces/{seq_name}.INDEL.Pisces.LeftAlign.vcf",
-        platypus_indel=output_dir+"/{seq_name}/Platypus/{seq_name}.INDEL.Platypus.LeftAlign.vcf",
-        vardict_indel=output_dir+"/{seq_name}/VarDict/{seq_name}.INDEL.VarDict.LeftAlign.vcf",
-        varscan2_indel=output_dir+"/{seq_name}/VarScan2/{seq_name}.INDEL.VarScan2.LeftAlign.vcf",
-        pindel_indel=output_dir+"/{seq_name}/pindel/{seq_name}.INDEL.pindel.vcf",
-        scalpel_indel=output_dir+"/{seq_name}/Scalpel/{seq_name}.INDEL.Scalpel.vcf"
+        input_files=input_indel
     output:
         output_dir+"/{seq_name}/{seq_name}.INDEL.merge.vcf",
     container:
         "docker://ngsom/tumorseq"
     params:
-        base_dir=output_dir
+        base_dir=output_dir,
+        args=input_indel_params
+        n=n_concordant
     shell:
         """
         source activate utils
-        workflow/scripts/merge_caller_indel.py {input.freebayes_indel} {input.hc_indel} {input.lofreq_indel} {input.mutect2_indel} {input.pisces_indel} {input.platypus_indel} {input.vardict_indel} {input.varscan2_indel} {input.pindel_indel} {input.scalpel_indel} {output}
+        workflow/scripts/merge_caller_indel.py {params.args} -N {params.n} {output}
         """
 
 rule filter_snv :
@@ -1616,6 +1657,47 @@ rule qualimap :
         """
         awk '{{print $1"\t"$2"\t"$3"\t"$4"\t.\t." }}' {input.target} > {params.base_dir}/{wildcards.seq_name}/{wildcards.seq_name}.target.bed
         qualimap bamqc -nt 8 -bam {input.bam} --java-mem-size=64G  -outdir {params.base_dir}/{wildcards.seq_name}/QC -gff {params.base_dir}/{wildcards.seq_name}/{wildcards.seq_name}.target.bed
+        """
+
+rule BedToInterval:
+    input:
+        ref_dict=config["genome"]["dict_file"],
+        target=config["metadata"]["design"],
+        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam",
+        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam.bai",
+    output:
+        output_dir+"/{seq_name}/QC/target.interval"
+    params:
+        base_dir=output_dir
+    container:
+        "docker://ngsom/tumorseq"
+    shell:
+        """
+        java -Xmx16G -jar /usr/share/java/picard.jar BedToIntervalList \
+        -I {input.target} \
+        -O {output} \
+        -SD {input.ref_dict}
+        """
+
+rule HsMetrics:
+    input:
+        bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam",
+        index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam.bai",
+        ref=config["genome"]["fasta_file"],
+        target=output_dir+"/{seq_name}/QC/target.interval"
+    output:
+        output_dir+"/{seq_name}/QC/{seq_name}.Hsmetrics"
+    params:
+        base_dir=output_dir
+    container:
+        "docker://ngsom/tumorseq"
+    shell:
+        """
+        java -Xmx16G -jar /usr/share/java/picard.jar CollectHsMetrics \
+        -I {input.bam} \
+        -O {output} \
+        -BAIT_INTERVALS {input.target} \
+        -TARGET_INTERVALS {input.target}
         """
         
 rule coverage_uniformity :
