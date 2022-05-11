@@ -1,22 +1,30 @@
 # Titre du projet
 
-Dépot de code pour les projets NGS du laboratoire d'oncologie moléculaire (CRCM)
+Workflow snakemake pour l'analyse de variants (SNP et INDEL) de type 'Tumor only', lorsque la contre-partie normale n'est pas disponible.
 
-### Prérequis
+# Description du workflow
 
-* conda >= 4.3.22 https://conda.io/docs/index.html
-* snakemake >= 3.13.3 https://snakemake.readthedocs.io/en/stable/
+Le workflow intègre toutes les étapes essentielles d'une analyse de variants.
 
-### Installation
+* Trimming des fichiers fastq (optionnel)
+* Controle qualité des fichiers fastq
+* Alignement des reads
+* Déduplication (optionnel)
+* Recalibration
+* Détection des SNP (8 outils au choix) et INDEL (10 outils au choix)
+* Merge des fichiers VCF issus des différents outils et vote majoritaire
+* Annotation des variants
 
-Installation de conda :
+### Prérequis outils
 
-```bash Miniconda3-latest-Linux-x86_64.sh```
+* singularity >= 3.5.3 https://github.com/sylabs/singularity
+* snakemake >= 6.5.0 https://snakemake.readthedocs.io/en/stable/
 
+### Fichiers de configuration
 
-Installation de snakemake :
+Le fichier ```config/config_tumor_only.yml``` contient tous les chemins vers les fichiers d'annotation, ainsi que les différentes options d'analyse.
 
-```conda install -c bioconda snakemake```
+Le fichier ```config/cluster2.yml``` contient les paramètres liés au cluster de calcul
 
 ###Fichier de log
 
@@ -26,47 +34,43 @@ Par défaut les fichiers de log du cluster de calcul sont générés dans
 /home/guille/logs/cluster/snakemake/
 ```
 
-Vous pouvez modifier le chemin de destination de ces logs dans le fichier cluster.yml et créer le dossier s'il n'existe pas.
+Vous pouvez modifier le chemin de destination de ces logs dans le fichier config/cluster2.yml et créer le dossier s'il n'existe pas.
 
 
 ### Utilisation
 
-Ajouter ces 3 lignes à votre .bashrc afin d'effacer vos variables d'environnement Python et Java
+Exemple de ligne de commande sur le clsuter de l'ifb (slurm) :
 
 ```
-export PYTHONNOUSERSITE=True
-unset PYTHONPATH
-unset JAVA_HOME
+snakemake --cores 400 -j 100 -T 3 \
+--configfile /shared/projects/pmngs/projet_seq/projet_hemato_V15/config_tumor_only.yml \
+--use-singularity \
+--singularity-prefix /shared/projects/pmngs/singularity_cache \
+--cluster-config config/cluster2.yml \
+--cluster "sbatch -N {cluster.host} -n {cluster.core} -t {cluster.time} --mem {cluster.mem} -o {cluster.stdout} -e {cluster.stderr}"
 ```
 
-Attention !!! Il est préférable de lancer cette commande en étant à la racine de son homedir, créant ainsi un dossier .snakemake pour toutes les analyses. 
-
-Exemple de ligne de commande pour le pipeline somatique avec utilisation du cluster de calcul (oar) :
+Exemple de ligne de commande sur le clsuter de l'ifb (slurm) :
 
 ```
-snakemake -j 9999 --snakefile /home/data/ngs_om/travail/scripts/snakefiles/Snakefile_tumor_normal_variant_analysis \
---configfile /home/data/ngs_om/travail/projects/test_Quentin/config_somatic.yml \
---use-conda \
---cluster-config /home/dacosta/cluster.yml \
---cluster "oarsub -l host={cluster.host}/core={cluster.core},walltime={cluster.time} -O {cluster.stdout} -E {cluster.stderr}"
+nohup snakemake --cores 400 -j 100 -T 3 \
+--configfile /shared/projects/pmngs/projet_seq/projet_hemato_V15/config_tumor_only.yml \
+--use-singularity \
+--singularity-prefix /shared/projects/pmngs/singularity_cache \
+--cluster-config config/cluster2.yml \
+--cluster "sbatch -N {cluster.host} -n {cluster.core} -t {cluster.time} --mem {cluster.mem} -o {cluster.stdout} -e {cluster.stderr}"&
 ```
 
-Exemple de ligne de commande pour le pipeline Tumour-only avec utilisation du cluster de calcul (oar)
+Exemple de ligne de commande sur le clsuter de l'ifb (slurm) :
 
 ```
-snakemake -j 9999 --snakefile /home/data/ngs_om/travail/scripts/snakefiles/Snakefile_tumor_only_variant_analysis \
---configfile /home/data/ngs_om/travail/scripts/snakefiles/config/config_tumor_only.yml \
---use-conda \
---cluster-config /home/data/ngs_om/travail/scripts/snakefiles/config/cluster.yml \
---cluster "oarsub -l host={cluster.host}/core={cluster.core},walltime={cluster.time} -O {cluster.stdout} -E {cluster.stderr}"
+nohup snakemake --cores 400 -j 100 -T 3 \
+--configfile /shared/projects/pmngs/projet_seq/projet_hemato_V15/config_tumor_only.yml \
+--use-singularity \
+--singularity-prefix /shared/projects/pmngs/singularity_cache \
+--cluster-config config/cluster2.yml \
+--cluster "sbatch -N {cluster.host} -n {cluster.core} -t {cluster.time} --mem {cluster.mem} -o {cluster.stdout} -e {cluster.stderr}"& > nohupoutput &
 ```
-
-## Fichiers de configurations
-
-* --configfile : fichier de configuration pour l'analyse (Panel, chemins, etc...)
-* --cluster-config : fichier de configuration du cluster (chemins des logs, etc...)
-
-Attention !!!  Il faut obligatoirement modifier le fichier de configuration du cluster pour les fichiers de log. 
 
 ## Développé Avec
 
@@ -77,5 +81,5 @@ Attention !!!  Il faut obligatoirement modifier le fichier de configuration du c
 ## Auteurs
 
 * **Arnaud Guille**
-* **Quentin Da Costa**
+
 
