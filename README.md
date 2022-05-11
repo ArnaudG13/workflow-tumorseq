@@ -39,7 +39,7 @@ Vous pouvez modifier le chemin de destination de ces logs dans le fichier config
 
 ### Utilisation
 
-Exemple de ligne de commande sur le clsuter de l'ifb (slurm) :
+Exemple de ligne de commande sur le cluster de l'ifb (slurm) à partir du dossier principal du workflow ```workflow-tumorseq```
 
 ```
 snakemake --cores 400 -j 100 -T 3 \
