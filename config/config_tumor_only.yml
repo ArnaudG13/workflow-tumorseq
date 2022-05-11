@@ -1,0 +1,74 @@
+  description: |
+    This config file works with the Snakefile Sknakefile_tumor_only_variant_analysis
+
+  author: "Arnaud Guille"
+
+  env1: "/shared/home/aguille/snakefiles/envs/tumor_seq_analysis_environment2.yml"
+  env_file_sv: "/shared/home/aguille/snakefiles/envs/iAnnotSV_env.yml"
+  env_file_gatk: "/shared/home/aguille/snakefiles/envs/gatk_env.yml"
+
+  genome:
+    organism: "Homo Sapiens"
+    version: "HG19 UCSC"
+    size: "3e9"
+    fasta_file: "/shared/projects/pmngs/human_genome_hg19/sequence/ucsc.hg19.fasta"
+    dict_file: "/shared/projects/pmngs/human_genome_hg19/sequence/ucsc.hg19.dict"
+    chrLength_file: "/shared/projects/pmngs/human_genome_hg19/sequence/sizes.genome"
+    known_indel1: "/shared/projects/pmngs/human_genome_hg19/annot/1000G_phase1.indels.hg19.sites.vcf"
+    known_indel2: "/shared/projects/pmngs/human_genome_hg19/annot/Mills_and_1000G_gold_standard.indels.hg19.sites.vcf"
+    known_site: "/shared/projects/pmngs/human_genome_hg19/annot/dbsnp_138.hg19.vcf.gz"
+
+  metadata:
+    design: "/shared/projects/pmngs/human_genome_hg19/annot/hemato_V15.bed"
+    design_name: "hemato_V15"
+    seq_type: "pe"
+    date: "22-05-02"
+    center: "IPC"
+    application: "Target"
+    platform: "illumina"
+
+  dir:
+    base: "/shared/projects/pmngs/projet_seq/projet_hemato_V15"
+    fastq_dir: "fastq"
+
+  tools:
+    paired: "1"
+    trimming: "1"
+    molecular_barcode: "0"
+    uniq : "0"
+    dedup : "0"
+    ffpe : "0"
+    mapping: "bwamem"
+    snv_calling: ['FreeBayes', 'HaplotypeCaller', 'LoFreq', 'Mutect2', 'Pisces', 'Platypus' 'VarDict', 'VarScan2']
+    indel_calling: ['FreeBayes', 'HaplotypeCaller', 'LoFreq', 'Mutect2', 'pindel', 'Pisces','Platypus', 'Scalpel' 'VarDict', 'VarScan2']
+    sv_calling: ""
+    n_concordant: "4"
+
+  annovar:
+      hg19_db : "/shared/projects/pmngs/human_genome_hg19/annot/annovar_0823/humandb/"
+
+  varscan2:
+      min_coverage : "10"
+      min_var_frac : "0.02"
+      min_alt_count : "2"
+      min_avg_qual : "20"
+      strand_filter : "0"
+
+  VCF_filter :
+      mode : "VarScan2"
+
+  freebayes:
+      min_coverage : "10"
+      min_var_frac : "0.01"
+      min_alt_count : "2"
+
+  iAnnotSV:
+      ref_file : "/shared/home/aguille/iAnnotateSV/iAnnotateSV/data/references/hg19.sv.table.txt"
+      canonical_txt : "/shared/home/aguille/iAnnotateSV/iAnnotateSV/data/canonicalInfo/canonical_transcripts_cv6.txt"
+      uniprot : "/shared/home/aguille/iAnnotateSV/iAnnotateSV/data/UcscUniprotdomainInfo/hg19.uniprot.spAnnot.table.txt"
+      repeat_region : "/shared/home/aguille/iAnnotateSV/iAnnotateSV/data/repeat_region/hg19_repeatRegion.tsv"
+      dgv : "/shared/home/aguille/iAnnotateSV/iAnnotateSV/data/database_of_genomic_variants/hg19_DGv_Annotation.tsv"
+      cancer_census : "/shared/home/aguille/iAnnotateSV/iAnnotateSV/data/cosmic/cancer_gene_census.tsv"
+      cosmic_fusion_count : "/shared/home/aguille/iAnnotateSV/iAnnotateSV/data/cosmic/cosmic_fusion_counts.tsv"
+      all_canonical_txt : "/shared/home/aguille/iAnnotateSV/iAnnotateSV/data/canonicalInfo/canonical_transcripts.txt"
+      region_to_exclude : "/shared/home/aguille/iAnnotateSV/iAnnotateSV/data/human.hg19.delly.excl.tsv"
