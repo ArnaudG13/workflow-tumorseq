@@ -213,12 +213,12 @@ if not "mode" in config["VCF_filter"].keys() :
 
 #Variant Caller used for the analysis
 if config["tools"]["snv_calling"] == "All" :
-    vc_list_snv = ['FreeBayes', 'HaplotypeCaller', 'LoFreq', 'Mutect2', 'Pisces', 'Platypus' 'VarDict', 'VarScan2']
+    vc_list_snv = ['FreeBayes', 'HaplotypeCaller', 'LoFreq', 'Mutect2', 'Pisces', 'Platypus','VarDict', 'VarScan2']
 else :
     vc_list_snv = config["tools"]["snv_calling"]
     
 if config["tools"]["indel_calling"] == "All" :
-    vc_list_indel = ['FreeBayes', 'HaplotypeCaller', 'LoFreq', 'Mutect2', 'pindel', 'Pisces','Platypus', 'Scalpel' 'VarDict', 'VarScan2']
+    vc_list_indel = ['FreeBayes', 'HaplotypeCaller', 'LoFreq', 'Mutect2', 'pindel', 'Pisces','Platypus', 'Scalpel','VarDict', 'VarScan2']
 else :
     vc_list_indel = config["tools"]["indel_calling"]
 
@@ -250,12 +250,12 @@ freebayes_snv=output_dir+"/{seq_name}/FreeBayes/{seq_name}.SNP.FreeBayes.LeftAli
 #expand(output_dir+"/{seq_name}/{seq_name}.INDEL.{variant_caller_indel}.result",seq_name=SAMPLES,variant_caller_indel=output_indel)
 #get snv vcf files
 def input_snv(wildcards):
-    tab = expand(output_dir+"/{seq_name}/{variant_caller}/{seq_name}.SNP.{variant_caller}.LeftAlign.vcf",seq_name=SAMPLES,variant_caller=vc_list_snv)
+    tab = expand(output_dir+"/{seq_name}/{variant_caller}/{seq_name}.SNP.{variant_caller}.LeftAlign.vcf",seq_name=wildcards.seq_name,variant_caller=vc_list_snv)
     return tab
 
 def input_snv_params(wildcards):
     params = []
-    tab = expand(output_dir+"/{seq_name}/{variant_caller}/{seq_name}.SNP.{variant_caller}.LeftAlign.vcf",seq_name=SAMPLES,variant_caller=vc_list_snv)
+    tab = expand(output_dir+"/{seq_name}/{variant_caller}/{seq_name}.SNP.{variant_caller}.LeftAlign.vcf",seq_name=wildcards.seq_name,variant_caller=vc_list_snv)
     for elt in tab :
         for vc in vc_list_snv :
             if re.search(vc, elt) :
@@ -264,12 +264,12 @@ def input_snv_params(wildcards):
 
 #get indel germline vcf files
 def input_indel(wildcards):
-    tab = expand(output_dir+"/{seq_name}/{variant_caller}/{seq_name}.INDEL.{variant_caller}.LeftAlign.vcf",seq_name=SAMPLES,variant_caller=vc_list_indel)
+    tab = expand(output_dir+"/{seq_name}/{variant_caller}/{seq_name}.INDEL.{variant_caller}.LeftAlign.vcf",seq_name=wildcards.seq_name,variant_caller=vc_list_indel)
     return tab
 
 def input_indel_params(wildcards):
     params = []
-    tab = expand(output_dir+"/{seq_name}/{variant_caller}/{seq_name}.INDEL.{variant_caller}.LeftAlign.vcf",seq_name=SAMPLES,variant_caller=vc_list_indel)
+    tab = expand(output_dir+"/{seq_name}/{variant_caller}/{seq_name}.INDEL.{variant_caller}.LeftAlign.vcf",seq_name=wildcards.seq_name,variant_caller=vc_list_indel)
     for elt in tab :
         for vc in vc_list_indel :
             if re.search(vc, elt) :
@@ -638,7 +638,7 @@ rule GATK_recalibrate :
         known_indel2=config["genome"]["known_indel2"],
         target=config["metadata"]["design"],
     output:
-        grp=temp(output_dir+"{seq_name}/{seq_name}.grp"),
+        grp=temp(output_dir+"/{seq_name}/{seq_name}.grp"),
         bam=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam",
         index=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bai",
         index2=output_dir+"/{seq_name}/{seq_name}"+tag_process_mb+"sort"+tag_process_uniq+"RG"+tag_process_dedup+"recall."+"bam.bai"
@@ -1558,7 +1558,7 @@ rule merge_indel_caller :
         "docker://ngsom/tumorseq"
     params:
         base_dir=output_dir,
-        args=input_indel_params
+        args=input_indel_params,
         n=n_concordant
     shell:
         """

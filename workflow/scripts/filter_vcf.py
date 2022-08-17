@@ -354,6 +354,10 @@ def process_line(in_queue, out_list, out_list2) :
 						variant_frequency = round(float(alt_count)/float(total_count),3)
 				else :
 					variant_frequency = 0
+				
+				if stringency_parameter == "none" :
+					variant_frequency = float(dict_record["VAF"])
+				
 				#cov on each strand or not
 				if ref_p > 0 and ref_m > 0 :
 					cov_ref_each_strand = True
