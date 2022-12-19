@@ -246,16 +246,15 @@ print(vc_list_snv)
 print(vc_list_indel)
 
 output_analysis = "/analyse_"+config["metadata"]["date"]
-freebayes_snv=output_dir+"/{seq_name}/FreeBayes/{seq_name}.SNP.FreeBayes.LeftAlign.vcf",
-#expand(output_dir+"/{seq_name}/{seq_name}.INDEL.{variant_caller_indel}.result",seq_name=SAMPLES,variant_caller_indel=output_indel)
+
 #get snv vcf files
 def input_snv(wildcards):
-    tab = expand(output_dir+"/{seq_name}/{variant_caller}/{seq_name}.SNP.{variant_caller}.LeftAlign.vcf",seq_name=wildcards.seq_name,variant_caller=vc_list_snv)
+    tab = expand(output_dir+"/{seq_name}/{variant_caller}/{seq_name}.SNP.{variant_caller}.normalized.vcf",seq_name=wildcards.seq_name,variant_caller=vc_list_snv)
     return tab
 
 def input_snv_params(wildcards):
     params = []
-    tab = expand(output_dir+"/{seq_name}/{variant_caller}/{seq_name}.SNP.{variant_caller}.LeftAlign.vcf",seq_name=wildcards.seq_name,variant_caller=vc_list_snv)
+    tab = expand(output_dir+"/{seq_name}/{variant_caller}/{seq_name}.SNP.{variant_caller}.normalized.vcf",seq_name=wildcards.seq_name,variant_caller=vc_list_snv)
     for elt in tab :
         for vc in vc_list_snv :
             if re.search(vc, elt) :
@@ -264,12 +263,12 @@ def input_snv_params(wildcards):
 
 #get indel germline vcf files
 def input_indel(wildcards):
-    tab = expand(output_dir+"/{seq_name}/{variant_caller}/{seq_name}.INDEL.{variant_caller}.LeftAlign.vcf",seq_name=wildcards.seq_name,variant_caller=vc_list_indel)
+    tab = expand(output_dir+"/{seq_name}/{variant_caller}/{seq_name}.INDEL.{variant_caller}.normalized.vcf",seq_name=wildcards.seq_name,variant_caller=vc_list_indel)
     return tab
 
 def input_indel_params(wildcards):
     params = []
-    tab = expand(output_dir+"/{seq_name}/{variant_caller}/{seq_name}.INDEL.{variant_caller}.LeftAlign.vcf",seq_name=wildcards.seq_name,variant_caller=vc_list_indel)
+    tab = expand(output_dir+"/{seq_name}/{variant_caller}/{seq_name}.INDEL.{variant_caller}.normalized.vcf",seq_name=wildcards.seq_name,variant_caller=vc_list_indel)
     for elt in tab :
         for vc in vc_list_indel :
             if re.search(vc, elt) :
@@ -795,6 +794,20 @@ rule freebayes :
     --allele-balance-priors-off
     """
 
+rule vt_freebayes :
+    input:
+        vcf=output_dir+"/{seq_name}/FreeBayes/{seq_name}.FreeBayes.vcf",
+        ref=config["genome"]["fasta_file"]
+    output:
+        output_dir+"/{seq_name}/FreeBayes/{seq_name}.FreeBayes.normalized.vcf"
+    container:
+        "docker://ngsom/tumorseq"
+    params:
+        base_dir=output_dir
+    shell:"""
+        /opt/vt/vt decompose -s {input.vcf} | /opt/vt/vt normalize -n -r {input.ref} - > {output}
+        """
+
 rule GATK_left_align_freebayes :
     input:
         vcf=output_dir+"/{seq_name}/FreeBayes/{seq_name}.FreeBayes.vcf",
@@ -817,19 +830,19 @@ rule GATK_left_align_freebayes :
 
 rule split_snp_indel_freebayes :
     input:
-        vcf=output_dir+"/{seq_name}/FreeBayes/{seq_name}.FreeBayes.LeftAlign.vcf"
+        vcf=output_dir+"/{seq_name}/FreeBayes/{seq_name}.FreeBayes.normalized.vcf"
     output:
-        output_dir+"/{seq_name}/FreeBayes/{seq_name}.SNP.FreeBayes.LeftAlign.vcf",
-        output_dir+"/{seq_name}/FreeBayes/{seq_name}.INDEL.FreeBayes.LeftAlign.vcf"
+        output_dir+"/{seq_name}/FreeBayes/{seq_name}.SNP.FreeBayes.normalized.vcf",
+        output_dir+"/{seq_name}/FreeBayes/{seq_name}.INDEL.FreeBayes.normalized.vcf"
     container:
         "docker://ngsom/tumorseq"
     params:
         base_dir=output_dir
     shell:"""
-        vcftools --vcf {input.vcf} --keep-only-indels --recode --recode-INFO-all --out {params.base_dir}/{wildcards.seq_name}/FreeBayes/{wildcards.seq_name}.INDEL.FreeBayes.LeftAlign
-        mv {params.base_dir}/{wildcards.seq_name}/FreeBayes/{wildcards.seq_name}.INDEL.FreeBayes.LeftAlign.recode.vcf {params.base_dir}/{wildcards.seq_name}/FreeBayes/{wildcards.seq_name}.INDEL.FreeBayes.LeftAlign.vcf
-        vcftools --vcf {input.vcf} --remove-indels --recode --recode-INFO-all --out  {params.base_dir}/{wildcards.seq_name}/FreeBayes/{wildcards.seq_name}.SNP.FreeBayes.LeftAlign
-        mv {params.base_dir}/{wildcards.seq_name}/FreeBayes/{wildcards.seq_name}.SNP.FreeBayes.LeftAlign.recode.vcf {params.base_dir}/{wildcards.seq_name}/FreeBayes/{wildcards.seq_name}.SNP.FreeBayes.LeftAlign.vcf
+        vcftools --vcf {input.vcf} --keep-only-indels --recode --recode-INFO-all --out {params.base_dir}/{wildcards.seq_name}/FreeBayes/{wildcards.seq_name}.INDEL.FreeBayes.normalized
+        mv {params.base_dir}/{wildcards.seq_name}/FreeBayes/{wildcards.seq_name}.INDEL.FreeBayes.normalized.recode.vcf {params.base_dir}/{wildcards.seq_name}/FreeBayes/{wildcards.seq_name}.INDEL.FreeBayes.normalized.vcf
+        vcftools --vcf {input.vcf} --remove-indels --recode --recode-INFO-all --out  {params.base_dir}/{wildcards.seq_name}/FreeBayes/{wildcards.seq_name}.SNP.FreeBayes.normalized
+        mv {params.base_dir}/{wildcards.seq_name}/FreeBayes/{wildcards.seq_name}.SNP.FreeBayes.normalized.recode.vcf {params.base_dir}/{wildcards.seq_name}/FreeBayes/{wildcards.seq_name}.SNP.FreeBayes.normalized.vcf
         """
 
 rule vardict :
@@ -848,6 +861,20 @@ rule vardict :
     shell:"""
     VarDict {params.dedup} -th 8 -G {input.ref} -f 0.02 -N {wildcards.seq_name} -b {input.bam} -c 1 -S 2 -E 3 -g 4 {input.target} | teststrandbias.R | var2vcf_valid.pl -N {wildcards.seq_name} -E -f 0.02 > {params.base_dir}/{wildcards.seq_name}/VarDict/{wildcards.seq_name}.VarDict.vcf
     """
+
+rule vt_vardict :
+    input:
+        vcf=output_dir+"/{seq_name}/VarDict/{seq_name}.VarDict.vcf",
+        ref=config["genome"]["fasta_file"]
+    output:
+        output_dir+"/{seq_name}/VarDict/{seq_name}.VarDict.normalized.vcf"
+    container:
+        "docker://ngsom/tumorseq"
+    params:
+        base_dir=output_dir
+    shell:"""
+        /opt/vt/vt decompose -s {input.vcf} | /opt/vt/vt normalize -n -r {input.ref} - > {output}
+        """
 
 rule GATK_left_align_vardict :
     input:
@@ -871,19 +898,19 @@ rule GATK_left_align_vardict :
 
 rule split_snp_indel_vardict :
     input:
-        vcf=output_dir+"/{seq_name}/VarDict/{seq_name}.VarDict.LeftAlign.vcf"
+        vcf=output_dir+"/{seq_name}/VarDict/{seq_name}.VarDict.normalized.vcf"
     output:
-        output_dir+"/{seq_name}/VarDict/{seq_name}.SNP.VarDict.LeftAlign.vcf",
-        output_dir+"/{seq_name}/VarDict/{seq_name}.INDEL.VarDict.LeftAlign.vcf"
+        output_dir+"/{seq_name}/VarDict/{seq_name}.SNP.VarDict.normalized.vcf",
+        output_dir+"/{seq_name}/VarDict/{seq_name}.INDEL.VarDict.normalized.vcf"
     container:
         "docker://ngsom/tumorseq"
     params:
         base_dir=output_dir
     shell:"""
-        vcftools --vcf {input.vcf} --keep-only-indels --recode --recode-INFO-all --out {params.base_dir}/{wildcards.seq_name}/VarDict/{wildcards.seq_name}.INDEL.VarDict.LeftAlign
-        mv {params.base_dir}/{wildcards.seq_name}/VarDict/{wildcards.seq_name}.INDEL.VarDict.LeftAlign.recode.vcf {params.base_dir}/{wildcards.seq_name}/VarDict/{wildcards.seq_name}.INDEL.VarDict.LeftAlign.vcf
-        vcftools --vcf {input.vcf} --remove-indels --recode --recode-INFO-all --out  {params.base_dir}/{wildcards.seq_name}/VarDict/{wildcards.seq_name}.SNP.VarDict.LeftAlign
-        mv {params.base_dir}/{wildcards.seq_name}/VarDict/{wildcards.seq_name}.SNP.VarDict.LeftAlign.recode.vcf {params.base_dir}/{wildcards.seq_name}/VarDict/{wildcards.seq_name}.SNP.VarDict.LeftAlign.vcf
+        vcftools --vcf {input.vcf} --keep-only-indels --recode --recode-INFO-all --out {params.base_dir}/{wildcards.seq_name}/VarDict/{wildcards.seq_name}.INDEL.VarDict.normalized
+        mv {params.base_dir}/{wildcards.seq_name}/VarDict/{wildcards.seq_name}.INDEL.VarDict.normalized.recode.vcf {params.base_dir}/{wildcards.seq_name}/VarDict/{wildcards.seq_name}.INDEL.VarDict.normalized.vcf
+        vcftools --vcf {input.vcf} --remove-indels --recode --recode-INFO-all --out  {params.base_dir}/{wildcards.seq_name}/VarDict/{wildcards.seq_name}.SNP.VarDict.normalized
+        mv {params.base_dir}/{wildcards.seq_name}/VarDict/{wildcards.seq_name}.SNP.VarDict.normalized.recode.vcf {params.base_dir}/{wildcards.seq_name}/VarDict/{wildcards.seq_name}.SNP.VarDict.normalized.vcf
         """
 
 rule scalpel :
@@ -902,6 +929,20 @@ rule scalpel :
     /opt/scalpel-0.5.4/scalpel-discovery --single --bam {input.bam} --bed {input.target} --ref {input.ref} --dir {params.base_dir}/{wildcards.seq_name}/Scalpel --numprocs 8 --intarget
     /opt/scalpel-0.5.4/scalpel-export --single --db {params.base_dir}/{wildcards.seq_name}/Scalpel/variants.db.dir --bed {input.target} --ref {input.ref} --min-alt-count 2 --min-vaf 0.02 --min-coverage 10 --intarget > {output}
     """
+
+rule vt_scalpel :
+    input:
+        vcf=output_dir+"/{seq_name}/Scalpel/{seq_name}.INDEL.Scalpel.vcf",
+        ref=config["genome"]["fasta_file"]
+    output:
+        output_dir+"/{seq_name}/Scalpel/{seq_name}.INDEL.Scalpel.normalized.vcf"
+    container:
+        "docker://ngsom/tumorseq"
+    params:
+        base_dir=output_dir
+    shell:"""
+        /opt/vt/vt decompose -s {input.vcf} | /opt/vt/vt normalize -n -r {input.ref} - > {output}
+        """
 
 rule GATK_left_align_scalpel :
     input:
@@ -937,9 +978,23 @@ rule pisces :
         base_dir=output_dir,
         dedup=dedup_option_pisces
     shell:"""
-    dotnet /opt/Pisces/Pisces.dll -bam {input.bam} -g /shared/ifbstor1/projects/pmngs/Homo_sapiens/UCSC/hg19/Sequence/WholeGenomeFasta {params.dedup} --gvcf false -i {input.target} -t 8 --minbq 20 --minmq 30 --mindp 10 --minvf 0.02 --callmnvs true --threadbychr true --outfolder {params.base_dir}/{wildcards.seq_name}/Pisces
+    dotnet /opt/Pisces/Pisces.dll -bam {input.bam} -g /shared/projects/pmngs/Homo_sapiens/UCSC/hg19/Sequence/WholeGenomeFasta {params.dedup} --gvcf false -i {input.target} -t 8 --minbq 20 --minmq 30 --mindp 10 --minvf 0.02 --callmnvs true --threadbychr true --outfolder {params.base_dir}/{wildcards.seq_name}/Pisces
     mv {params.base_dir}/{wildcards.seq_name}/Pisces/{wildcards.seq_name}.*.vcf {output}
     """
+
+rule vt_pisces :
+    input:
+        vcf=output_dir+"/{seq_name}/Pisces/{seq_name}.Pisces.vcf",
+        ref=config["genome"]["fasta_file"]
+    output:
+        output_dir+"/{seq_name}/Pisces/{seq_name}.Pisces.normalized.vcf"
+    container:
+        "docker://ngsom/tumorseq"
+    params:
+        base_dir=output_dir
+    shell:"""
+        /opt/vt/vt decompose -s {input.vcf} | /opt/vt/vt normalize -n -r {input.ref} - > {output}
+        """
 
 rule GATK_left_align_pisces :
     input:
@@ -963,19 +1018,19 @@ rule GATK_left_align_pisces :
 
 rule split_snp_indel_pisces :
     input:
-        vcf=output_dir+"/{seq_name}/Pisces/{seq_name}.Pisces.LeftAlign.vcf"
+        vcf=output_dir+"/{seq_name}/Pisces/{seq_name}.Pisces.normalized.vcf"
     output:
-        output_dir+"/{seq_name}/Pisces/{seq_name}.SNP.Pisces.LeftAlign.vcf",
-        output_dir+"/{seq_name}/Pisces/{seq_name}.INDEL.Pisces.LeftAlign.vcf"
+        output_dir+"/{seq_name}/Pisces/{seq_name}.SNP.Pisces.normalized.vcf",
+        output_dir+"/{seq_name}/Pisces/{seq_name}.INDEL.Pisces.normalized.vcf"
     container:
         "docker://ngsom/tumorseq"
     params:
         base_dir=output_dir
     shell:"""
-        vcftools --vcf {input.vcf} --keep-only-indels --recode --recode-INFO-all --out {params.base_dir}/{wildcards.seq_name}/Pisces/{wildcards.seq_name}.INDEL.Pisces.LeftAlign
-        mv {params.base_dir}/{wildcards.seq_name}/Pisces/{wildcards.seq_name}.INDEL.Pisces.LeftAlign.recode.vcf {params.base_dir}/{wildcards.seq_name}/Pisces/{wildcards.seq_name}.INDEL.Pisces.LeftAlign.vcf
-        vcftools --vcf {input.vcf} --remove-indels --recode --recode-INFO-all --out  {params.base_dir}/{wildcards.seq_name}/Pisces/{wildcards.seq_name}.SNP.Pisces.LeftAlign
-        mv {params.base_dir}/{wildcards.seq_name}/Pisces/{wildcards.seq_name}.SNP.Pisces.LeftAlign.recode.vcf {params.base_dir}/{wildcards.seq_name}/Pisces/{wildcards.seq_name}.SNP.Pisces.LeftAlign.vcf
+        vcftools --vcf {input.vcf} --keep-only-indels --recode --recode-INFO-all --out {params.base_dir}/{wildcards.seq_name}/Pisces/{wildcards.seq_name}.INDEL.Pisces.normalized
+        mv {params.base_dir}/{wildcards.seq_name}/Pisces/{wildcards.seq_name}.INDEL.Pisces.normalized.recode.vcf {params.base_dir}/{wildcards.seq_name}/Pisces/{wildcards.seq_name}.INDEL.Pisces.normalized.vcf
+        vcftools --vcf {input.vcf} --remove-indels --recode --recode-INFO-all --out  {params.base_dir}/{wildcards.seq_name}/Pisces/{wildcards.seq_name}.SNP.Pisces.normalized
+        mv {params.base_dir}/{wildcards.seq_name}/Pisces/{wildcards.seq_name}.SNP.Pisces.normalized.recode.vcf {params.base_dir}/{wildcards.seq_name}/Pisces/{wildcards.seq_name}.SNP.Pisces.normalized.vcf
         """
 
 rule platypus :
@@ -995,6 +1050,20 @@ rule platypus :
         source activate platypus
         platypus callVariants --nCPU=8 --bamFiles={input.bam} --refFile={input.ref} --output={output} {params.dedup} --minFlank=0 --regions={input.target} --minBaseQual=20 --minMapQual=30 --minVarFreq=0.02
     """
+
+rule vt_platypus :
+    input:
+        vcf=output_dir+"/{seq_name}/Platypus/{seq_name}.Platypus.vcf",
+        ref=config["genome"]["fasta_file"]
+    output:
+        output_dir+"/{seq_name}/Platypus/{seq_name}.Platypus.normalized.vcf"
+    container:
+        "docker://ngsom/tumorseq"
+    params:
+        base_dir=output_dir
+    shell:"""
+        /opt/vt/vt decompose -s {input.vcf} | /opt/vt/vt normalize -n -r {input.ref} - > {output}
+        """
 
 rule GATK_left_align_platypus :
     input:
@@ -1018,19 +1087,19 @@ rule GATK_left_align_platypus :
 
 rule split_snp_indel_platypus :
     input:
-        vcf=output_dir+"/{seq_name}/Platypus/{seq_name}.Platypus.LeftAlign.vcf"
+        vcf=output_dir+"/{seq_name}/Platypus/{seq_name}.Platypus.normalized.vcf"
     output:
-        output_dir+"/{seq_name}/Platypus/{seq_name}.SNP.Platypus.LeftAlign.vcf",
-        output_dir+"/{seq_name}/Platypus/{seq_name}.INDEL.Platypus.LeftAlign.vcf"
+        output_dir+"/{seq_name}/Platypus/{seq_name}.SNP.Platypus.normalized.vcf",
+        output_dir+"/{seq_name}/Platypus/{seq_name}.INDEL.Platypus.normalized.vcf"
     container:
         "docker://ngsom/tumorseq"
     params:
         base_dir=output_dir
     shell:"""
-        vcftools --vcf {input.vcf} --keep-only-indels --recode --recode-INFO-all --out {params.base_dir}/{wildcards.seq_name}/Platypus/{wildcards.seq_name}.INDEL.Platypus.LeftAlign
-        mv {params.base_dir}/{wildcards.seq_name}/Platypus/{wildcards.seq_name}.INDEL.Platypus.LeftAlign.recode.vcf {params.base_dir}/{wildcards.seq_name}/Platypus/{wildcards.seq_name}.INDEL.Platypus.LeftAlign.vcf
-        vcftools --vcf {input.vcf} --remove-indels --recode --recode-INFO-all --out  {params.base_dir}/{wildcards.seq_name}/Platypus/{wildcards.seq_name}.SNP.Platypus.LeftAlign
-        mv {params.base_dir}/{wildcards.seq_name}/Platypus/{wildcards.seq_name}.SNP.Platypus.LeftAlign.recode.vcf {params.base_dir}/{wildcards.seq_name}/Platypus/{wildcards.seq_name}.SNP.Platypus.LeftAlign.vcf
+        vcftools --vcf {input.vcf} --keep-only-indels --recode --recode-INFO-all --out {params.base_dir}/{wildcards.seq_name}/Platypus/{wildcards.seq_name}.INDEL.Platypus.normalized
+        mv {params.base_dir}/{wildcards.seq_name}/Platypus/{wildcards.seq_name}.INDEL.Platypus.normalized.recode.vcf {params.base_dir}/{wildcards.seq_name}/Platypus/{wildcards.seq_name}.INDEL.Platypus.normalized.vcf
+        vcftools --vcf {input.vcf} --remove-indels --recode --recode-INFO-all --out  {params.base_dir}/{wildcards.seq_name}/Platypus/{wildcards.seq_name}.SNP.Platypus.normalized
+        mv {params.base_dir}/{wildcards.seq_name}/Platypus/{wildcards.seq_name}.SNP.Platypus.normalized.recode.vcf {params.base_dir}/{wildcards.seq_name}/Platypus/{wildcards.seq_name}.SNP.Platypus.normalized.vcf
         """
 
 rule GATK_haplotypecaller :
@@ -1056,6 +1125,20 @@ rule GATK_haplotypecaller :
         -I {input.bam} \
         """
 
+rule vt_HC :
+    input:
+        vcf=output_dir+"/{seq_name}/HaplotypeCaller/{seq_name}.HaplotypeCaller.vcf",
+        ref=config["genome"]["fasta_file"]
+    output:
+        output_dir+"/{seq_name}/HaplotypeCaller/{seq_name}.HaplotypeCaller.normalized.vcf"
+    container:
+        "docker://ngsom/tumorseq"
+    params:
+        base_dir=output_dir
+    shell:"""
+        /opt/vt/vt decompose -s {input.vcf} | /opt/vt/vt normalize -n -r {input.ref} - > {output}
+        """
+
 rule GATK_left_align_hc :
     input:
         vcf=output_dir+"/{seq_name}/HaplotypeCaller/{seq_name}.HaplotypeCaller.vcf",
@@ -1078,19 +1161,19 @@ rule GATK_left_align_hc :
 
 rule split_snp_indel_hc :
     input:
-        vcf=output_dir+"/{seq_name}/HaplotypeCaller/{seq_name}.HaplotypeCaller.LeftAlign.vcf"
+        vcf=output_dir+"/{seq_name}/HaplotypeCaller/{seq_name}.HaplotypeCaller.normalized.vcf"
     output:
-        output_dir+"/{seq_name}/HaplotypeCaller/{seq_name}.SNP.HaplotypeCaller.LeftAlign.vcf",
-        output_dir+"/{seq_name}/HaplotypeCaller/{seq_name}.INDEL.HaplotypeCaller.LeftAlign.vcf"
+        output_dir+"/{seq_name}/HaplotypeCaller/{seq_name}.SNP.HaplotypeCaller.normalized.vcf",
+        output_dir+"/{seq_name}/HaplotypeCaller/{seq_name}.INDEL.HaplotypeCaller.normalized.vcf"
     container:
         "docker://ngsom/tumorseq"
     params:
         base_dir=output_dir
     shell:"""
-        vcftools --vcf {input.vcf} --keep-only-indels --recode --recode-INFO-all --out {params.base_dir}/{wildcards.seq_name}/HaplotypeCaller/{wildcards.seq_name}.INDEL.HaplotypeCaller.LeftAlign
-        mv {params.base_dir}/{wildcards.seq_name}/HaplotypeCaller/{wildcards.seq_name}.INDEL.HaplotypeCaller.LeftAlign.recode.vcf {params.base_dir}/{wildcards.seq_name}/HaplotypeCaller/{wildcards.seq_name}.INDEL.HaplotypeCaller.LeftAlign.vcf
-        vcftools --vcf {input.vcf} --remove-indels --recode --recode-INFO-all --out  {params.base_dir}/{wildcards.seq_name}/HaplotypeCaller/{wildcards.seq_name}.SNP.HaplotypeCaller.LeftAlign
-        mv {params.base_dir}/{wildcards.seq_name}/HaplotypeCaller/{wildcards.seq_name}.SNP.HaplotypeCaller.LeftAlign.recode.vcf {params.base_dir}/{wildcards.seq_name}/HaplotypeCaller/{wildcards.seq_name}.SNP.HaplotypeCaller.LeftAlign.vcf
+        vcftools --vcf {input.vcf} --keep-only-indels --recode --recode-INFO-all --out {params.base_dir}/{wildcards.seq_name}/HaplotypeCaller/{wildcards.seq_name}.INDEL.HaplotypeCaller.normalized
+        mv {params.base_dir}/{wildcards.seq_name}/HaplotypeCaller/{wildcards.seq_name}.INDEL.HaplotypeCaller.normalized.recode.vcf {params.base_dir}/{wildcards.seq_name}/HaplotypeCaller/{wildcards.seq_name}.INDEL.HaplotypeCaller.normalized.vcf
+        vcftools --vcf {input.vcf} --remove-indels --recode --recode-INFO-all --out  {params.base_dir}/{wildcards.seq_name}/HaplotypeCaller/{wildcards.seq_name}.SNP.HaplotypeCaller.normalized
+        mv {params.base_dir}/{wildcards.seq_name}/HaplotypeCaller/{wildcards.seq_name}.SNP.HaplotypeCaller.normalized.recode.vcf {params.base_dir}/{wildcards.seq_name}/HaplotypeCaller/{wildcards.seq_name}.SNP.HaplotypeCaller.normalized.vcf
         """
 
 rule varscan2_snp :
@@ -1118,6 +1201,20 @@ rule varscan2_snp :
     --min-var-freq 0.02 \
     --strand-filter 0 > {output}
     """
+
+rule vt_varscan2_snp :
+    input:
+        vcf=output_dir+"/{seq_name}/VarScan2/{seq_name}.SNP.VarScan2.vcf",
+        ref=config["genome"]["fasta_file"]
+    output:
+        output_dir+"/{seq_name}/VarScan2/{seq_name}.SNP.VarScan2.normalized.vcf"
+    container:
+        "docker://ngsom/tumorseq"
+    params:
+        base_dir=output_dir
+    shell:"""
+        /opt/vt/vt decompose -s {input.vcf} | /opt/vt/vt normalize -n -r {input.ref} - > {output}
+        """
 
 rule GATK_left_align_varscan2_snp :
     input:
@@ -1165,6 +1262,20 @@ rule varscan2_indel :
     --min-var-freq 0.02 \
     --strand-filter 0 > {output}
     """
+
+rule vt_varscan2_indel :
+    input:
+        vcf=output_dir+"/{seq_name}/VarScan2/{seq_name}.INDEL.VarScan2.vcf",
+        ref=config["genome"]["fasta_file"]
+    output:
+        output_dir+"/{seq_name}/VarScan2/{seq_name}.INDEL.VarScan2.normalized.vcf"
+    container:
+        "docker://ngsom/tumorseq"
+    params:
+        base_dir=output_dir
+    shell:"""
+        /opt/vt/vt decompose -s {input.vcf} | /opt/vt/vt normalize -n -r {input.ref} - > {output}
+        """
 
 rule GATK_left_align_varscan2_indel :
     input:
@@ -1317,12 +1428,26 @@ rule FilterMutect2 :
         -O {output}
     """
 
+rule vt_mutect2 :
+    input:
+        vcf=output_dir+"/{seq_name}/Mutect2/{seq_name}.Mutect2.filtered.vcf",
+        ref=config["genome"]["fasta_file"],
+    output:
+        output_dir+"/{seq_name}/Mutect2/{seq_name}.Mutect2.filtered.normalized.vcf"
+    container:
+        "docker://ngsom/tumorseq"
+    params:
+        base_dir=output_dir
+    shell:"""
+        /opt/vt/vt decompose -s {input.vcf} | /opt/vt/vt normalize -n -r {input.ref} - > {output}
+        """
+
 rule GATK_left_align_mutect2 :
     input:
         vcf=output_dir+"/{seq_name}/Mutect2/{seq_name}.Mutect2.filtered.vcf",
         ref=config["genome"]["fasta_file"],
     output:
-        output_dir+"/{seq_name}/Mutect2/{seq_name}.Mutect2.filtered.LeftAlign.vcf",
+        output_dir+"/{seq_name}/Mutect2/{seq_name}.Mutect2.filtered.LeftAlign.vcf"
     container:
         "docker://broadinstitute/gatk:4.2.2.0"
     params:
@@ -1337,39 +1462,21 @@ rule GATK_left_align_mutect2 :
         --O {output}
         """
 
-rule GATK_split_snp_indel_mutect2 :
+rule split_snp_indel_Mutect2 :
     input:
-        vcf=output_dir+"/{seq_name}/Mutect2/{seq_name}.Mutect2.filtered.vcf",
-        ref=config["genome"]["fasta_file"],
+        vcf=output_dir+"/{seq_name}/Mutect2/{seq_name}.Mutect2.filtered.normalized.vcf",
+        ref=config["genome"]["fasta_file"]
     output:
-        temp(output_dir+"/{seq_name}/Mutect2/{seq_name}.SNP.Mutect2.LeftAlign.tmp.vcf"),
-        temp(output_dir+"/{seq_name}/Mutect2/{seq_name}.INDEL.Mutect2.LeftAlign.tmp.vcf"),
+        snp=output_dir+"/{seq_name}/Mutect2/{seq_name}.SNP.Mutect2.normalized.vcf",
+        indel=output_dir+"/{seq_name}/Mutect2/{seq_name}.INDEL.Mutect2.normalized.vcf"
     container:
         "docker://broadinstitute/gatk:4.2.2.0"
     params:
         base_dir=output_dir
     shell:"""
-        gatk SelectVariants --java-options -Xmx16G -R {input.ref} -V {input.vcf} --select-type-to-include SNP -O {params.base_dir}/{wildcards.seq_name}/Mutect2/{wildcards.seq_name}.SNP.Mutect2.LeftAlign.tmp.vcf
-        gatk SelectVariants --java-options -Xmx16G -R {input.ref} -V {input.vcf} --select-type-to-include INDEL -O {params.base_dir}/{wildcards.seq_name}/Mutect2/{wildcards.seq_name}.INDEL.Mutect2.LeftAlign.tmp.vcf
-        """
-
-rule vcfbreak_multi_mutect2 :
-    input:
-        snp=output_dir+"/{seq_name}/Mutect2/{seq_name}.SNP.Mutect2.LeftAlign.tmp.vcf",
-        indel=output_dir+"/{seq_name}/Mutect2/{seq_name}.INDEL.Mutect2.LeftAlign.tmp.vcf",
-        ref=config["genome"]["fasta_file"]
-    output:
-        snp=output_dir+"/{seq_name}/Mutect2/{seq_name}.SNP.Mutect2.LeftAlign.vcf",
-        indel=output_dir+"/{seq_name}/Mutect2/{seq_name}.INDEL.Mutect2.LeftAlign.vcf",
-    container:
-        "docker://ngsom/tumorseq"
-    params:
-        base_dir=output_dir
-    shell:"""
-        vcflib vcfbreakmulti {input.snp} > {output.snp}
-        vcflib vcfcheck -x -f {input.ref} {input.indel} > {params.base_dir}/{wildcards.seq_name}/Mutect2/{wildcards.seq_name}.INDEL.Mutect2.LeftAlign.fix.vcf
-	vcflib vcfbreakmulti {params.base_dir}/{wildcards.seq_name}/Mutect2/{wildcards.seq_name}.INDEL.Mutect2.LeftAlign.fix.vcf > {output.indel}
-        """
+    gatk SelectVariants --java-options -Xmx16G -R {input.ref} -V {input.vcf} --select-type-to-include SNP -O {output.snp}
+	gatk SelectVariants --java-options -Xmx16G -R {input.ref} -V {input.vcf} --select-type-to-include INDEL --select-type-to-include MNP -O {output.indel}
+    """
 
 rule lofreq :
     input :
@@ -1390,6 +1497,20 @@ rule lofreq :
         samtools index {params.base_dir}/{wildcards.seq_name}/LoFreq/{wildcards.seq_name}.dindel.bam
         lofreq call-parallel --pp-threads 8 --call-indels -f {input.ref} -l {input.target} -C 10 -o {output.dindel_vcf} {params.base_dir}/{wildcards.seq_name}/LoFreq/{wildcards.seq_name}.dindel.bam
     """
+
+rule vt_lofreq :
+    input:
+        vcf=output_dir+"/{seq_name}/LoFreq/{seq_name}.LoFreq.vcf",
+        ref=config["genome"]["fasta_file"]
+    output:
+        output_dir+"/{seq_name}/LoFreq/{seq_name}.LoFreq.normalized.vcf"
+    container:
+        "docker://ngsom/tumorseq"
+    params:
+        base_dir=output_dir
+    shell:"""
+        /opt/vt/vt decompose -s {input.vcf} | /opt/vt/vt normalize -n -r {input.ref} - > {output}
+        """
 
 rule GATK_left_align_lofreq :
     input:
@@ -1413,19 +1534,19 @@ rule GATK_left_align_lofreq :
 
 rule split_snp_indel_lofreq :
     input:
-        vcf=output_dir+"/{seq_name}/LoFreq/{seq_name}.LoFreq.LeftAlign.vcf"
+        vcf=output_dir+"/{seq_name}/LoFreq/{seq_name}.LoFreq.normalized.vcf"
     output:
-        output_dir+"/{seq_name}/LoFreq/{seq_name}.SNP.LoFreq.LeftAlign.vcf",
-        output_dir+"/{seq_name}/LoFreq/{seq_name}.INDEL.LoFreq.LeftAlign.vcf"
+        output_dir+"/{seq_name}/LoFreq/{seq_name}.SNP.LoFreq.normalized.vcf",
+        output_dir+"/{seq_name}/LoFreq/{seq_name}.INDEL.LoFreq.normalized.vcf"
     container:
         "docker://ngsom/tumorseq"
     params:
         base_dir=output_dir
     shell:"""
-        vcftools --vcf {input.vcf} --keep-only-indels --recode --recode-INFO-all --out {params.base_dir}/{wildcards.seq_name}/LoFreq/{wildcards.seq_name}.INDEL.LoFreq.LeftAlign
-        mv {params.base_dir}/{wildcards.seq_name}/LoFreq/{wildcards.seq_name}.INDEL.LoFreq.LeftAlign.recode.vcf {params.base_dir}/{wildcards.seq_name}/LoFreq/{wildcards.seq_name}.INDEL.LoFreq.LeftAlign.vcf
-        vcftools --vcf {input.vcf} --remove-indels --recode --recode-INFO-all --out  {params.base_dir}/{wildcards.seq_name}/LoFreq/{wildcards.seq_name}.SNP.LoFreq.LeftAlign
-        mv {params.base_dir}/{wildcards.seq_name}/LoFreq/{wildcards.seq_name}.SNP.LoFreq.LeftAlign.recode.vcf {params.base_dir}/{wildcards.seq_name}/LoFreq/{wildcards.seq_name}.SNP.LoFreq.LeftAlign.vcf
+        vcftools --vcf {input.vcf} --keep-only-indels --recode --recode-INFO-all --out {params.base_dir}/{wildcards.seq_name}/LoFreq/{wildcards.seq_name}.INDEL.LoFreq.normalized
+        mv {params.base_dir}/{wildcards.seq_name}/LoFreq/{wildcards.seq_name}.INDEL.LoFreq.normalized.recode.vcf {params.base_dir}/{wildcards.seq_name}/LoFreq/{wildcards.seq_name}.INDEL.LoFreq.normalized.vcf
+        vcftools --vcf {input.vcf} --remove-indels --recode --recode-INFO-all --out  {params.base_dir}/{wildcards.seq_name}/LoFreq/{wildcards.seq_name}.SNP.LoFreq.normalized
+        mv {params.base_dir}/{wildcards.seq_name}/LoFreq/{wildcards.seq_name}.SNP.LoFreq.normalized.recode.vcf {params.base_dir}/{wildcards.seq_name}/LoFreq/{wildcards.seq_name}.SNP.LoFreq.normalized.vcf
         """
 
 rule prepare_pindel :
@@ -1530,6 +1651,20 @@ rule pindel_filter_region :
     shell:"""
         vcftools --vcf {input.vcf} --bed {input.target} --recode-INFO-all --recode --out {params.base_dir}/{wildcards.seq_name}/pindel/{wildcards.seq_name}.INDEL.pindel
         mv {params.base_dir}/{wildcards.seq_name}/pindel/{wildcards.seq_name}.INDEL.pindel.recode.vcf {output}
+        """
+
+rule vt_pindel :
+    input:
+        vcf=output_dir+"/{seq_name}/pindel/{seq_name}.INDEL.pindel.LeftAlign.vcf",
+        ref=config["genome"]["fasta_file"]
+    output:
+        output_dir+"/{seq_name}/pindel/{seq_name}.INDEL.pindel.normalized.vcf"
+    container:
+        "docker://ngsom/tumorseq"
+    params:
+        base_dir=output_dir
+    shell:"""
+        /opt/vt/vt decompose -s {input.vcf} | /opt/vt/vt normalize -n -r {input.ref} - > {output}
         """
 
 rule merge_snv_caller :
